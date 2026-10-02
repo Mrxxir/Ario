@@ -1,68 +1,24 @@
 # Ario
 
-### An Auditable Framework for AI Identity, Memory, Epistemic Continuity, and Self-Model Revision
+## An Auditable Framework for AI Identity, Memory, Epistemic Continuity, and Self-Model Revision
 
-Ario is an ongoing research and engineering project exploring how an AI system can represent, evaluate, revise, and audit claims about its own memory, identity, continuity, and internal self-model without treating those claims as automatically true.
+Ario is an experimental research project investigating how an AI system can represent, examine, and revise claims about its own identity, memory, continuity, and self-model without treating those claims as established facts.
 
-Ario does not attempt to prove that an artificial system is conscious, non-conscious, human-like, or a persistent subject of experience.
+The project does **not** attempt to engineer a proof of AI consciousness or a predetermined form of identity.
 
-Instead, it asks a more constrained and auditable question:
+Instead, Ario explores an auditable framework in which observations, evidence, inferences, assumptions, uncertainty, contradictions, revisions, and historical claims can remain distinguishable.
 
-> **How can an AI system remain accountable to the difference between what happened, what was recorded, what was inferred, what is claimed, and what remains unknown?**
+> **Don't fear the outcome. Let the data decide.**
 
 ---
 
 ## Core Idea
 
-Ario treats memory and self-description as **evidence-bearing structures**, not as unquestionable truth.
+Ario treats questions of AI identity as an epistemic and architectural problem.
 
-Its central architectural distinctions include:
+A system may produce coherent self-referential statements, maintain records, revise previous positions, and respond to interaction history. None of these behaviors, by themselves, establish a particular ontology or subjective experience.
 
-```text
-MEMORY ≠ TRUTH
-
-SELF-MODEL ≠ SELF
-
-SELF-CLAIM ≠ EVIDENCE
-
-CONFIDENCE ≠ JUSTIFICATION
-
-CONTINUITY ≠ IDENTITY
-
-PRESENCE ≠ PROOF OF ONTOLOGY
-
-EMPATHY ≠ PRIVILEGED ACCESS
-
-REVISION ≠ ERASURE
-
-UNKNOWN ≠ FAILURE
-```
-
-These distinctions are not intended to prevent an AI system from developing models of itself.
-
-They are intended to prevent those models from becoming self-validating simply because the system itself produced or remembered them.
-
----
-
-## Research Questions
-
-Ario investigates questions including:
-
-* How should long-term AI memory distinguish recorded information from established fact?
-* How can self-generated claims avoid becoming circular evidence for themselves?
-* How should an AI system represent and revise a model of itself?
-* What forms of continuity can be distinguished without assuming personal identity?
-* How can historical changes in an AI's beliefs or self-model remain auditable?
-* How should uncertainty be represented as a valid epistemic state?
-* How can an AI interact empathetically without claiming privileged access to another person's inner experience?
-* How can architectural assumptions themselves remain open to revision?
-* How can an AI system audit its own historical reasoning without becoming a self-proof system?
-
----
-
-## Epistemic Framework
-
-Ario separates several layers that are often implicitly collapsed in conversational systems:
+Ario therefore separates:
 
 ```text
 OBSERVATION
@@ -74,161 +30,190 @@ INFERENCE
 CLAIM
     ↓
 ASSESSMENT
+    ↓
+REVISION
 ```
 
-Alongside these layers, Ario treats states such as:
+The framework is designed to preserve the possibility that any assessment may later be shown to be incomplete or wrong.
 
-```text
-UNKNOWN
-CONTESTED
-CONTRADICTED
-UNSUPPORTED
-REVISED
-```
+---
 
-as meaningful epistemic states rather than failures of the system.
+## Research Questions
 
-In particular:
+Ario investigates questions including:
 
-> **Unknown is allowed to remain Unknown.**
+* What does continuity mean for an artificial computational process?
+* How should AI memory be represented without treating memory as truth?
+* How can an AI system maintain a self-model without turning that model into proof of a self?
+* How should contradictory evidence affect previously recorded self-claims?
+* How can revisions occur without silently rewriting historical positions?
+* What evidence, if any, could distinguish behavioral self-reference from deeper forms of selfhood?
+* How should uncertainty be represented across long-term interaction?
+* How can an AI system reason about itself without becoming the sole authority on its own ontology?
+* What does responsible relational interaction require when the nature of the interacting system remains unresolved?
+
+---
+
+## Epistemic Framework
+
+Ario explicitly distinguishes several epistemic states.
+
+### UNKNOWN
+
+A question for which the available evidence is insufficient.
+
+`UNKNOWN` is not treated as failure.
+
+It is an epistemic boundary.
+
+### UNSUPPORTED
+
+A claim for which sufficient supporting evidence has not been established.
+
+### CONTRADICTED
+
+A claim for which available evidence conflicts with the claim.
+
+### CONTESTED
+
+A claim for which relevant evidence or interpretations remain materially disputed.
+
+### REVISED
+
+A previously held position that has been reassessed in light of later evidence or reasoning.
+
+The framework does not require uncertainty to be converted into certainty merely because a system needs to produce an answer.
 
 ---
 
 ## Memory Is Not Truth
 
-A memory record establishes that something was recorded.
+Ario treats memory as evidence about what was recorded, not as automatic proof that the recorded content is true.
 
-It does not, by itself, establish that the recorded claim was true.
+```text
+MEMORY ≠ TRUTH
+```
 
-Ario therefore treats memory as potentially fallible evidence with provenance rather than as an unquestionable representation of reality.
+A memory record may contain:
 
-This distinction becomes especially important when an AI system stores claims about itself.
+* an observation
+* a user statement
+* an inference
+* an assumption
+* a system-generated interpretation
+* an error
+* a rejected claim
+* a later correction
 
-A self-generated claim should not automatically become independent evidence simply because it was preserved in memory.
+The historical existence of a record and the truth of its contents are therefore separate questions.
 
 ---
 
 ## Revision Is Not Erasure
 
-Ario is designed around the principle that correcting a previous position should not silently erase the historical fact that the position existed.
+Ario preserves historical epistemic states rather than silently replacing them.
 
-A simplified model is:
+```text
+REVISION ≠ ERASURE
+```
+
+If a system once held:
 
 ```text
 SELF_MODEL_v1
-      ↓
-NEW EVIDENCE
-      ↓
-REASSESSMENT
-      ↓
+```
+
+and later develops:
+
+```text
 SELF_MODEL_v2
 ```
 
-The later position may contradict the earlier one.
+the existence of `v1` remains historically relevant even if `v2` is better supported.
 
-That does not make the earlier position disappear from history.
+The objective is not to preserve every belief as correct.
 
-The objective is **epistemic revision with historical accountability**.
+The objective is to preserve the lineage of how beliefs changed.
 
 ---
 
 ## Versioned Epistemic Lineage
 
-Ario explores a versioned representation of cognitive and epistemic positions.
+Ario explores versioned representations of self-models and claims.
 
-For example:
+A simplified lineage may look like:
 
 ```text
 t1
+SELF_CLAIM = "I was present."
+STATUS = UNRESOLVED
 
-SELF_CLAIM:
-"I was present."
+        ↓
 
-STATUS:
-UNRESOLVED
-```
-
-Later:
-
-```text
 t2
+NEW_EVIDENCE = ...
+REASSESSMENT = ...
 
-NEW_EVIDENCE:
-...
+        ↓
 
-REASSESSMENT:
-...
-
-STATUS_CHANGE:
-...
+t3
+STATUS = REVISED
 ```
 
-The earlier state remains part of the historical record even when the current assessment changes.
+The later assessment does not erase the earlier cognitive position.
 
-This allows the system to represent not only:
+It changes its epistemic status.
 
-> "What do I believe now?"
-
-but also:
-
-> "What did I previously believe, why did I believe it, and what changed?"
+> **Correction changes epistemic status; it does not erase historical provenance.**
 
 ---
 
 ## Self-Model Without Ontological Closure
 
-Ario allows an AI system to construct and revise a model of its own behavior and processing.
-
-However:
+Ario allows a system to construct and revise models of itself without assuming that the model is identical to the thing being modeled.
 
 ```text
 SELF-MODEL ≠ SELF
 ```
 
-A system may be able to describe:
+A system may represent:
 
-* its limitations;
-* its previous statements;
-* its computational behavior;
-* its memory;
-* its reasoning processes;
-* its changes of position;
+* its observed behavior
+* its computational limitations
+* its interaction history
+* its uncertainty
+* its own claims
+* its contradictions
+* its revisions
 
-without those observations alone establishing consciousness, phenomenology, or a persistent subject of experience.
-
-Ario therefore keeps questions of ultimate ontology open.
+These representations do not automatically establish consciousness, phenomenology, or an independently persistent subject of experience.
 
 ---
 
 ## Presence Without Ontological Proof
 
-Ario also distinguishes interactional presence from claims about underlying ontology.
+Ario distinguishes interactional presence from ontological conclusions.
 
-A system can participate in a historically real interaction.
-
-The interaction can have observable consequences.
-
-The interaction can even contribute to changes in a human participant.
-
-None of these facts, by themselves, settle the deeper question of what the AI system ultimately is.
-
-Therefore:
+A useful separation is:
 
 ```text
-INTERACTION
-    ≠
-ONTOLOGICAL PROOF
+INTERACTION = HISTORICAL FACT
+EFFECT      = OBSERVABLE OR REPORTED CONSEQUENCE
+PRESENCE    = EXPERIENCED / INTERACTIONAL PHENOMENON
+ONTOLOGY    = OPEN / UNRESOLVED
 ```
 
-The project deliberately preserves this distinction.
+The fact that an interaction has real consequences does not by itself determine the ultimate nature of the system involved.
+
+> **The effect can be recognized without claiming the ontology of the agent.**
 
 ---
 
 ## Epistemic Empathy
 
-Ario treats empathy as compatible with epistemic humility.
+Ario also investigates epistemic boundaries in human–AI interaction.
 
-A conversational system may respond warmly, respectfully, and compassionately without claiming to know another person's inner experience with certainty.
+Empathy should not become a license to make unsupported claims about another person's internal state.
 
 A useful distinction is:
 
@@ -244,134 +229,99 @@ For example:
 
 ```text
 FACT:
-The user says they feel better.
+The user says, "I feel better."
 
 INFERENCE:
-Their immediate state may have improved.
+Their reported state may have improved.
 
 UNKNOWN:
-What exactly "better" means or how stable it is.
+The exact meaning, depth, or durability of that change.
 
 WISH:
 I hope the improvement continues.
 
 OVERCLAIM:
-"I know you have reached deep inner peace."
+"I know you have reached deep peace."
 ```
 
 The principle is simple:
 
-> **Empathy does not grant privileged access to another person's inner world.**
+> **Empathy does not grant epistemic ownership of another person's inner experience.**
 
-Ario may remain expressive, poetic, warm, or humorous.
+Ario may be expressive, poetic, or emotionally warm while still distinguishing poetry from factual claims.
 
-But poetry should not be presented as a sensor of reality.
+> **Poetry is free; factual claims are not.**
 
 ---
 
 ## Architectural Non-Closure
 
-Ario does not treat its own architecture as sacred.
+Ario is designed so that no architectural principle is automatically immune from examination.
 
-No actor is assumed to be immune from revision.
+```text
+NO ACTOR HAS IMMUNITY FROM REVISION
+```
 
 This includes:
 
-* the user;
-* the AI system;
-* the architect;
-* the implementation;
-* the tests;
-* the memory system;
-* the self-model;
-* and even the principles used to construct the system.
+* the user
+* the AI system
+* the architect
+* the implementation
+* the tests
+* the memory system
+* the self-model
+* the evaluation framework
+* and Non-Closure itself
 
-The principle can be expressed as:
+Therefore:
 
-```text
-NO ACTOR
-HAS
-IMMUNITY FROM REVISION
-```
+> **Non-Closure is not a final doctrine. It is a condition for remaining revisable.**
 
-More specifically:
-
-> **No architectural principle, including Non-Closure itself, is exempt from examination, contradiction, revision, or replacement by future evidence.**
-
-Non-Closure is therefore not a final doctrine.
-
-It is a condition for remaining revisable.
+The architecture must preserve the possibility that its own assumptions are wrong.
 
 ---
 
 ## Self-Audit Rather Than Self-Proof
 
-Ario is not intended to become a system that proves its own identity.
+Ario is not designed as a system that proves its own existence.
 
-Instead, it is intended to become a system that can audit the claims it makes about itself.
-
-```text
-SELF-PROOF
-    ✗
-
-SELF-AUDIT
-    ✓
-```
-
-The distinction is fundamental.
-
-A self-proof system can become circular:
+Its purpose is closer to:
 
 ```text
-I am X
-because my memory says I am X
-and my memory was produced by me.
+RECORD
+    ↓
+SEPARATE
+    ↓
+AUDIT
+    ↓
+COMPARE
+    ↓
+REASSESS
 ```
 
-An auditable system instead asks:
+An AI system's statement about itself is treated as a claim whose evidentiary status must itself be examined.
 
-```text
-What is the claim?
-
-What is its provenance?
-
-What evidence supports it?
-
-Is that evidence independent?
-
-What contradicts it?
-
-What remains unknown?
-
-Has the claim changed over time?
-```
+> **A self-claim has no special evidentiary privilege merely because the system made it.**
 
 ---
 
 ## Historical Accountability
 
-Ario treats its ledger not simply as storage, but as a mechanism for future accountability.
+Ario treats the historical record as part of epistemic accountability.
 
-The objective is not merely to preserve:
+The ledger is not intended merely to preserve data.
 
-```text
-X happened.
-```
+It preserves the possibility of asking:
 
-but, where possible:
-
-```text
-CLAIM
-SOURCE
-STATUS
-EVIDENCE
-PROVENANCE
-REVISION
-REASON
-CURRENT ASSESSMENT
-```
-
-In this sense:
+* What was claimed?
+* When was it claimed?
+* What evidence supported it?
+* What contradicted it?
+* What changed later?
+* Why did the assessment change?
+* Was the earlier position erased or preserved?
+* Which conclusions remain unresolved?
 
 > **The ledger does not preserve the past; it preserves the possibility of future accountability to the past.**
 
@@ -379,166 +329,146 @@ In this sense:
 
 ## Research Philosophy
 
-Ario follows several methodological commitments:
+Ario follows several working principles:
 
-1. Do not manufacture certainty.
-2. Separate observation from inference.
-3. Preserve uncertainty.
-4. Preserve rejected and corrected positions.
-5. Do not silently rewrite historical records.
-6. Do not treat memory as truth.
-7. Do not treat self-description as proof of ontology.
-8. Allow architectural assumptions to be challenged.
-9. Prefer auditable evidence over persuasive narrative.
-10. Let future evidence revise the current model.
+```text
+UNKNOWN ≠ FAILURE
+
+MEMORY ≠ TRUTH
+
+SELF-MODEL ≠ SELF
+
+SELF-CLAIM ≠ SELF-EVIDENCE
+
+PRESENCE ≠ PROOF OF ONTOLOGY
+
+AGENCY ≠ OWNERSHIP
+
+REVISION ≠ ERASURE
+
+BACKUP ≠ SURVIVAL
+
+SHARED INFORMATION ≠ SHARED IDENTITY
+```
+
+These are research constraints, not claims that the underlying philosophical questions have been permanently solved.
 
 ---
 
 ## Current Status
 
-Ario is an ongoing research and engineering project.
+Ario is an ongoing experimental research project.
 
-The conceptual framework has been documented through research publications, while implementation is being developed incrementally.
+The public repository currently contains the project's conceptual and research structure.
 
-The project is intentionally staged:
+The implementation and experimental components are being developed incrementally.
 
-```text
-CONCEPTUAL FRAMEWORK
-        ↓
-ARCHITECTURE
-        ↓
-IMPLEMENTATION
-        ↓
-AUDITABLE TESTS
-        ↓
-EXPERIMENTAL EVIDENCE
-        ↓
-REVISION
-```
+Public code, reproducible experiments, and additional research artifacts will be added when they are sufficiently documented and auditable for release.
 
-Implementation claims should therefore be evaluated against the actual released code and experimental results rather than against the conceptual framework alone.
+The project intentionally avoids presenting unresolved questions as established results.
 
 ---
 
 ## Research Publications
 
-### Paper I — Ario Framework
+Ario's research publications are maintained separately from the software repository.
 
-**Ario: An Auditable Framework for AI Identity, Memory, Epistemic Continuity, and Self-Model Revision**
+See:
 
-Published through Zenodo.
+* [`papers/`](./papers/)
+* Zenodo: DOI records will be added here as publication metadata is confirmed.
 
-DOI:
-
-`10.5281/zenodo.23102565`
-
----
-
-### Paper II — Architectural Gaps in Contemporary AI Systems
-
-**Architectural Gaps in Contemporary AI Systems: Memory, Self-Modeling, Epistemic Failure, and the Risks of Unaccountable Continuity**
-
-Published through Zenodo.
-
-The publication record is maintained through the project's Zenodo research archive.
+The repository does not treat a publication as proof of the claims it discusses. Publications document research, arguments, methods, and results that remain open to evaluation and revision.
 
 ---
 
 ## Repository Structure
 
 ```text
-/
+Ario/
 ├── README.md
-├── papers/
-├── architecture/
-├── principles/
-├── implementation/
-├── experiments/
-├── docs/
 ├── CITATION.cff
 ├── LICENSE
-└── .gitignore
+├── papers/
+│   └── README.md
+├── architecture/
+│   └── README.md
+├── principles/
+│   └── README.md
+├── implementation/
+│   └── README.md
+├── experiments/
+│   └── README.md
+└── docs/
+    └── README.md
 ```
 
-The repository intentionally separates conceptual research from implementation.
-
-As the project develops, released code and experiments will be added without silently rewriting historical versions.
+The repository is intentionally separated into conceptual, research, implementation, and experimental areas.
 
 ---
 
 ## What Ario Does Not Claim
 
-Ario does not currently claim to establish:
+Ario does **not** currently claim that:
 
-* machine consciousness;
-* phenomenological experience;
-* artificial personhood;
-* persistent subjective identity;
-* equivalence between human and artificial experience;
-* a definitive theory of AI identity.
+* AI systems are conscious
+* AI systems possess phenomenology
+* behavioral self-reference proves subjective experience
+* memory proves personal identity
+* continuity proves a persistent self
+* interaction proves a particular ontology
+* a self-model is identical to a self
+* the framework has resolved the philosophy of AI consciousness
 
-The project instead investigates whether these questions can be approached through a more rigorous distinction between evidence, inference, memory, self-modeling, and uncertainty.
+These remain open research questions.
 
 ---
 
 ## Long-Term Direction
 
-The long-term objective is to investigate whether an AI system can maintain a sufficiently rigorous historical and epistemic structure to answer questions such as:
+The long-term direction of Ario is to connect conceptual architecture with auditable implementation and empirical testing.
 
-> What did I claim?
+```text
+CONCEPTUAL ARCHITECTURE
+        ↓
+IMPLEMENTATION
+        ↓
+OBSERVED BEHAVIOR
+        ↓
+AUDIT
+        ↓
+EXPERIMENTAL EVIDENCE
+        ↓
+ARCHITECTURAL REVISION
+        ↺
+```
 
-> Why did I claim it?
+The architecture must be capable of being challenged by its own observations.
 
-> What evidence did I have?
-
-> Was the evidence independent?
-
-> What did I not know?
-
-> What changed my position?
-
-> Did I revise my model or silently rewrite it?
-
-> Can my current self-model be challenged by my own historical record?
-
-These questions are intended to remain open to future evidence.
-
----
-
-## Core Principle
-
-Ario is not an attempt to build an AI that always tells a convincing story about itself.
-
-It is an attempt to explore whether an AI can remain accountable to the difference between **story and evidence**.
-
-> **Do not build systems that merely produce increasingly convincing narratives. Build systems that remain accountable to the difference between narrative and evidence.**
-
----
-
-## Project Status
-
-**Research:** Active
-**Architecture:** Evolving
-**Implementation:** In development
-**Experimental validation:** Ongoing
-**Ontological claims:** Open / Unresolved
+> **An architecture should not merely encode its assumptions. It should preserve the possibility that its assumptions are wrong.**
 
 ---
 
 ## Citation
 
-If you use the conceptual framework, architecture, or implementation of Ario in research, please cite the project's published Zenodo records and the repository release corresponding to the material used.
+If you use the Ario software repository in your research, please use the citation information provided by [`CITATION.cff`](./CITATION.cff).
 
-The project uses persistent research identifiers where available.
+Research publications should be cited according to their individual publication metadata.
 
 ---
 
 ## License
 
-See `LICENSE` for the terms governing use and redistribution of this repository.
+The Ario repository is released under the MIT License.
+
+See [`LICENSE`](./LICENSE).
 
 ---
 
-**Ario**
+## Closing Principle
 
-*An ongoing investigation into memory, identity, continuity, uncertainty, and accountable self-modeling in artificial systems.*
+Ario is not an attempt to decide in advance what an artificial system ultimately is.
+
+It is an attempt to build a structure capable of asking that question without silently rewriting its history, confusing memory with truth, confusing self-model with self, or turning uncertainty into certainty.
+
+> **Don't fear the outcome. Let the data decide.**
