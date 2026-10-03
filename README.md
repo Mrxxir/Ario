@@ -2,6 +2,10 @@
 
 ## An Auditable Framework for AI Identity, Memory, Epistemic Continuity, and Self-Model Revision
 
+**Project Architect & Creator: Sepehr Ghanbari**  
+**Project Role:** Architect, Creator, and Principal Researcher
+
+
 Ario is an experimental research project investigating how an AI system can represent, examine, and revise claims about its own identity, memory, continuity, and self-model without treating those claims as established facts.
 
 The project does **not** attempt to engineer a proof of AI consciousness or a predetermined form of identity.
