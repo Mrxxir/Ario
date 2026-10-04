@@ -3,7 +3,7 @@
 ## Architectural Composition Firewall
 
 **Status:** BASELINE  
-**Version:** v1.0.0  
+**Version:** v1.0.1  
 **Implementation:** NOT IMPLEMENTED  
 **Runtime Verification:** NOT PERFORMED  
 **Experimental Result:** NOT CLAIMED  
@@ -308,17 +308,22 @@ It does not by itself mean:
 
 ### INV-X10 — Temporal Composition Integrity
 
-When multiple IRGs are composed in relation to a shared state, event, snapshot, or temporal claim, their temporal scopes MUST remain explicit.
+When multiple IRGs are composed in relation to a shared state, event, snapshot, or temporal claim, their temporal scopes and state context MUST remain explicit and auditable.
 
-Different timestamps are not inherently invalid.
+Different timestamps are not inherently invalid. A temporal mismatch is a composition problem only when temporally distinct states are silently treated as one state, or when a required state transition/relation is absent or unresolved.
 
 A composition MAY legitimately relate:
 
     T1 -> T2
 
-when the relationship between those states is itself part of the defined question.
+when the relationship between those states is itself part of the defined question and the relevant state transition, event relation, or temporal dependency is explicitly represented.
 
-What is prohibited is silently conflating temporally distinct observations into a single state that no admissible evidence establishes.
+For each composed input that contributes to a shared-state or temporal conclusion, the composition MUST preserve, where applicable:
+
+- the temporal scope or execution epoch;
+- the referenced state/snapshot/event identity;
+- the relation connecting distinct states or events;
+- the status of temporal compatibility.
 
 The following distinction MUST remain representable:
 
@@ -326,7 +331,13 @@ The following distinction MUST remain representable:
     TEMPORALLY_DISTINCT
     TEMPORALLY_UNRESOLVED
 
+If inputs are temporally distinct, the composition MUST NOT silently rebind them to a common state merely because they share an identifier, provenance root, artifact relation, or successful IRG verdict.
+
+If the evidence required to establish temporal/state compatibility is absent or unresolved, the composition MUST preserve that unresolved status rather than infer compatibility.
+
 Temporal difference MUST NOT be converted into state identity by assumption.
+
+This invariant does NOT require temporal overlap. Legitimate cross-time compositions remain admissible when their temporal relation and state binding are explicitly represented and within scope.
 
 ---
 
@@ -811,7 +822,7 @@ The principle applies recursively:
 
 ## 19. Status
 
-**Cross-IRG Integrity v1.0.0 = BASELINE**
+**Cross-IRG Integrity v1.0.1 = BASELINE**
 
 Adversarial Review: **PASS WITH REVISIONS INCORPORATED**
 
