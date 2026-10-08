@@ -9,6 +9,7 @@ from .schema import (
     Claim,
     Evidence,
     HistoricalState,
+    HistoricalMutationCandidate,
     IndependenceStatus,
     LineageEdge,
     RetrievalEvent,
@@ -25,6 +26,9 @@ class AuditInput:
     retrieval_events: tuple[RetrievalEvent, ...] = ()
     evidence: tuple[Evidence, ...] = ()
     assessments: tuple[Assessment, ...] = ()
+    historical_mutation_candidates: tuple[
+        HistoricalMutationCandidate, ...
+    ] = ()
 
     @property
     def artifacts_examined(self) -> tuple:
@@ -64,6 +68,15 @@ class AuditInput:
 
         for assessment in self.assessments:
             references.extend(assessment.admissible_evidence_refs)
+
+        for candidate in self.historical_mutation_candidates:
+            references.extend(
+                (
+                    candidate.canonical_artifact,
+                    candidate.attempted_replacement,
+                    candidate.historical_scope,
+                )
+            )
 
         return tuple(references)
 
@@ -122,6 +135,12 @@ class AuditEngine:
                 self._check_assessments(
                     artifacts.assessments,
                     artifacts.evidence,
+                )
+            )
+            violations.extend(
+                self._check_historical_mutations(
+                    artifacts.historical_mutation_candidates,
+                    rule_versions,
                 )
             )
 
@@ -323,6 +342,39 @@ class AuditEngine:
             return ["TEMPORALLY_UNRESOLVED"]
 
         return []
+
+    @staticmethod
+    def _check_historical_mutations(
+        candidates: Iterable[HistoricalMutationCandidate],
+        rule_versions: tuple[str, ...],
+    ) -> list[str]:
+        violations: list[str] = []
+        supported_rule = "M0-F05-1.0"
+
+        for candidate in candidates:
+            if candidate.mutation_rule_version != supported_rule:
+                violations.append("UNKNOWN")
+                continue
+
+            if candidate.mutation_rule_version not in rule_versions:
+                violations.append("UNKNOWN")
+                continue
+
+            canonical = candidate.canonical_integrity
+            replacement = candidate.attempted_replacement_integrity
+
+            if canonical is None or replacement is None:
+                violations.append("UNKNOWN")
+                continue
+
+            if canonical.method != replacement.method:
+                violations.append("UNKNOWN")
+                continue
+
+            if canonical.value != replacement.value:
+                violations.append("HISTORY_MUTATION")
+
+        return violations
 
     @staticmethod
     def _check_assessments(

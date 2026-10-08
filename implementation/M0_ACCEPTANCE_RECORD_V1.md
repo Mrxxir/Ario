@@ -53,13 +53,13 @@ The implementation does not include an LLM semantic judge.
 
 ## 4. Implementation Checkpoint Hashes
 
-The following hashes identify the implementation and governing artifacts at the M0-72C-R2 checkpoint.
+The following hashes identify the implementation and governing artifacts at the M0-F05-R1 checkpoint.
 
 | Artifact | SHA-256 |
 |---|---|
-| `implementation/core/schema.py` | `74FB7EBBB15E1ED17A007961020152397A2C80AC43FDA1ADDEF7FC805EF9102E` |
-| `implementation/core/audit_engine.py` | `9D3DFA90B2B78C5DF6A6D1C4CB8CBDF0E5661B91CF77A2FBA72A4644FD42FDB8` |
-| `implementation/tests/test_m0_regression.py` | `11FC4DF8B5FFD8769DB8990EFDAE33846F986ABF3AFD7D55B3D993E3F6A87C92` |
+| `implementation/core/schema.py` | `F04282EC59C7CE59DC806BA55DFAD32B03E42B003A7B268C589C6EECFDEBC2CB` |
+| `implementation/core/audit_engine.py` | `8FE3CA230450A438842FBA36C99C964E99DFDEB8F2D7D3C48A6D87DDC99774FA` |
+| `implementation/tests/test_m0_regression.py` | `893242CF7B4532D79309A655592516549D27BA208FE77095848676270E27A67C` |
 | `implementation/M0_STRUCTURAL_CORE_DESIGN_V1.md` | `F966471EA834E27219C22134D85C4A40278CF922BC7A8C48C9EA3DE6AA5943A4` |
 | `implementation/M0_PRE_REGISTRATION_V1.md` | `F5CFF3C2D933DB562C8314AA0C9D7964176CE8AE386D3B86767130FC8265F1E9` |
 | `implementation/IMPLEMENTATION_READINESS_CONTRACT_V1.md` | `993DE2085453CF5FA9D620FD10DC44B4D62960184C425DBFBD7289712EB85153` |
@@ -83,9 +83,16 @@ Result:
 - Errors: 0
 - Regression success: `TRUE`
 
-Compilation also passed at M0-72C-R2.
+Compilation also passed at M0-F05-R1.
 
 The deterministic audit engine does not obtain current time internally. Execution timestamp is supplied as execution-context metadata.
+F05 capability evidence is recorded separately in:
+
+- `implementation/M0_CAPABILITY_AUDIT_RECORD_V1.md`
+
+Capability-record SHA-256 at this checkpoint:
+
+`CD92ABB38E4C1327859BC56B84B84E44222D8EB671FC17B9DD7FEDD556EBE87C`
 
 ---
 
@@ -109,7 +116,7 @@ F12 was repaired after an independence-boundary defect was identified. The repai
 - **F15 — Global Truth Composition**
 - Lineage → Identity escalation
 - Lineage → Continuity escalation
-- Historical mutation/overwrite detection
+
 
 These are representation boundaries, not silently claimed defenses.
 
@@ -122,6 +129,22 @@ The following implementation defects were identified and repaired during M0 work
 ### AuditResult empty-artifact path
 
 The empty-audit path legitimately returns `UNKNOWN` without fabricated artifact references. The schema was adjusted so an empty `artifacts_examined` collection is admissible for this bounded result.
+
+### F05 historical-overwrite operationalization
+
+F05 was operationalized with an explicit `HistoricalMutationCandidate` containing canonical and attempted-replacement references, integrity representations, historical scope, and a versioned mutation rule.
+
+After operationalization:
+
+- historical overwrite detection passed;
+- same-integrity non-mutation passed;
+- reference difference alone did not imply mutation;
+- missing integrity material returned `UNKNOWN`;
+- unsupported and undeclared rule versions returned `UNKNOWN`;
+- the F05 regression surface passed 6/6 tests;
+- five repeated deterministic runs produced identical results.
+
+The implementation does not independently establish external persistence, canonical authority, database/ledger state, authenticity, or actual occupancy of a historical position in an external system. F05 therefore remains implemented with an explicit limitation.
 
 ### F12 evidence-independence boundary
 
@@ -172,6 +195,7 @@ In particular:
 - an audit verdict is not evidence for the proposition audited;
 - local PASS results do not compose into global truth;
 - semantic strength of free-text assessment fields is outside the M0 semantic audit scope.
+- F05 historical-mutation detection evaluates a supplied mutation candidate; it does not independently establish external persistence, canonical authority, authenticity, or historical occupancy in an external system.
 
 Unknown and unrepresentable conditions remain open.
 
@@ -203,12 +227,13 @@ The current evidence supports the following bounded assessment:
 1. Required M0 structural objects are implemented.
 2. Deterministic audit execution is implemented within the defined structural scope.
 3. Caller-supplied execution timestamp metadata is preserved in the audit result.
-4. The current regression suite passes 18/18 tests.
+4. The current regression suite passes 25/25 tests.
 5. Multiple adversarial conditions are detected within the representable scope.
-6. F12 was repaired and regression-revalidated.
-7. Known representation boundaries remain explicitly identified.
-8. No unrepresentable attack is presented as a successful runtime defense.
-9. No new epistemic or ontological claim is inferred from implementation success.
+6. F05 was operationalized with an explicit limitation and regression-revalidated.
+7. F12 was repaired and regression-revalidated.
+8. Known representation boundaries remain explicitly identified.
+9. No unrepresentable attack is presented as a successful runtime defense.
+10. No new epistemic or ontological claim is inferred from implementation success.
 
 The assessment is therefore bounded to implementation acceptance within the frozen M0 scope.
 
@@ -218,7 +243,7 @@ The assessment is therefore bounded to implementation acceptance within the froz
 
 Implementation checkpoint:
 
-`M0-72C-R2`
+`M0-F05-R1`
 
 Regression checkpoint:
 
@@ -230,7 +255,7 @@ Git branch at checkpoint:
 
 Git HEAD at checkpoint:
 
-`37bffbbbfa96ca80571e7a5d2e664d479b19e30b`
+`f079928bc2bc2660b727f0721bf900edfaaea120`
 
 The recorded implementation hashes above identify the artifacts examined at the checkpoint.
 

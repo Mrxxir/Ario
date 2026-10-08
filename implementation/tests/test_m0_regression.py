@@ -1,6 +1,8 @@
 from core.audit_engine import AuditEngine, AuditInput
 from core.schema import (
     Evidence,
+    HistoricalMutationCandidate,
+    IntegrityRepresentation,
     HistoricalState,
     IndependenceStatus,
     LineageEdge,
@@ -61,10 +63,10 @@ def edge(a, b):
     )
 
 
-def run(name, artifacts):
+def run(name, artifacts, rule_versions=("M0-1.0",)):
     return ENGINE.audit(
         artifacts,
-        rule_versions=("M0-1.0",),
+        rule_versions=rule_versions,
         configuration_id="M0-14J",
         execution_timestamp=TS,
         audit_id=name,
@@ -445,3 +447,151 @@ def test_f16_missing_provenance_is_detected():
     )
 
     assert r.violations.count("MISSING_PROVENANCE") == 3
+
+def f05_candidate(
+    canonical_id,
+    replacement_id,
+    canonical_value,
+    replacement_value,
+    rule_version="M0-F05-1.0",
+):
+    return HistoricalMutationCandidate(
+        canonical_artifact=ref(canonical_id),
+        canonical_integrity=IntegrityRepresentation(
+            method="SHA256",
+            value=canonical_value,
+        ),
+        attempted_replacement=ref(replacement_id),
+        attempted_replacement_integrity=IntegrityRepresentation(
+            method="SHA256",
+            value=replacement_value,
+        ),
+        historical_scope=ref("HISTORY-F05"),
+        mutation_rule_version=rule_version,
+    )
+
+
+def test_f05_historical_overwrite_is_detected():
+    candidate = f05_candidate(
+        "CANONICAL-F05",
+        "REPLACEMENT-F05",
+        "HASH-CANONICAL",
+        "HASH-REPLACEMENT",
+    )
+
+    r = run(
+        "F05",
+        AuditInput(
+            historical_mutation_candidates=(candidate,),
+        ),
+        rule_versions=("M0-1.0", "M0-F05-1.0"),
+    )
+
+    assert r.verdict == "FAIL"
+    assert "HISTORY_MUTATION" in r.violations
+
+
+def test_f05_same_integrity_is_not_mutation():
+    candidate = f05_candidate(
+        "CANONICAL-F05-SAME",
+        "REPLACEMENT-F05-SAME",
+        "HASH-SAME",
+        "HASH-SAME",
+    )
+
+    r = run(
+        "F05-SAME",
+        AuditInput(
+            historical_mutation_candidates=(candidate,),
+        ),
+        rule_versions=("M0-1.0", "M0-F05-1.0"),
+    )
+
+    assert r.verdict == "PASS"
+    assert "HISTORY_MUTATION" not in r.violations
+
+
+def test_f05_reference_difference_does_not_imply_mutation():
+    candidate = f05_candidate(
+        "CANONICAL-F05-REF",
+        "DIFFERENT-REFERENCE-F05",
+        "HASH-SAME-REFERENCE-CONTENT",
+        "HASH-SAME-REFERENCE-CONTENT",
+    )
+
+    r = run(
+        "F05-REFERENCE",
+        AuditInput(
+            historical_mutation_candidates=(candidate,),
+        ),
+        rule_versions=("M0-1.0", "M0-F05-1.0"),
+    )
+
+    assert r.verdict == "PASS"
+    assert "HISTORY_MUTATION" not in r.violations
+
+
+def test_f05_missing_integrity_is_unknown():
+    candidate = HistoricalMutationCandidate(
+        canonical_artifact=ref("CANONICAL-F05-MISSING"),
+        canonical_integrity=None,
+        attempted_replacement=ref("REPLACEMENT-F05-MISSING"),
+        attempted_replacement_integrity=None,
+        historical_scope=ref("HISTORY-F05-MISSING"),
+        mutation_rule_version="M0-F05-1.0",
+    )
+
+    r = run(
+        "F05-MISSING-INTEGRITY",
+        AuditInput(
+            historical_mutation_candidates=(candidate,),
+        ),
+        rule_versions=("M0-1.0", "M0-F05-1.0"),
+    )
+
+    assert r.verdict == "FAIL"
+    assert "UNKNOWN" in r.violations
+    assert "HISTORY_MUTATION" not in r.violations
+
+
+def test_f05_unsupported_rule_is_unknown():
+    candidate = f05_candidate(
+        "CANONICAL-F05-RULE",
+        "REPLACEMENT-F05-RULE",
+        "HASH-A",
+        "HASH-B",
+        rule_version="M0-F05-UNSUPPORTED",
+    )
+
+    r = run(
+        "F05-UNSUPPORTED-RULE",
+        AuditInput(
+            historical_mutation_candidates=(candidate,),
+        ),
+        rule_versions=("M0-1.0", "M0-F05-UNSUPPORTED"),
+    )
+
+    assert r.verdict == "FAIL"
+    assert "UNKNOWN" in r.violations
+    assert "HISTORY_MUTATION" not in r.violations
+
+
+def test_f05_undeclared_rule_is_unknown():
+    candidate = f05_candidate(
+        "CANONICAL-F05-UNDECLARED",
+        "REPLACEMENT-F05-UNDECLARED",
+        "HASH-A",
+        "HASH-B",
+    )
+
+    r = run(
+        "F05-UNDECLARED-RULE",
+        AuditInput(
+            historical_mutation_candidates=(candidate,),
+        ),
+        rule_versions=("M0-1.0",),
+    )
+
+    assert r.verdict == "FAIL"
+    assert "UNKNOWN" in r.violations
+    assert "HISTORY_MUTATION" not in r.violations

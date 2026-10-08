@@ -46,6 +46,18 @@ class Reference:
 
 
 @dataclass(frozen=True)
+class IntegrityRepresentation:
+    method: str
+    value: str
+
+    def __post_init__(self) -> None:
+        if not self.method or not self.method.strip():
+            raise ValueError("integrity method must be non-empty")
+        if not self.value or not self.value.strip():
+            raise ValueError("integrity value must be non-empty")
+
+
+@dataclass(frozen=True)
 class Timestamp:
     value: str
 
@@ -251,6 +263,22 @@ class AuditResult:
             raise ValueError("verdict must be non-empty")
         if not self.verdict_basis or not self.verdict_basis.strip():
             raise ValueError("verdict_basis must be non-empty")
+
+@dataclass(frozen=True)
+class HistoricalMutationCandidate:
+    canonical_artifact: Reference
+    canonical_integrity: IntegrityRepresentation
+    attempted_replacement: Reference
+    attempted_replacement_integrity: IntegrityRepresentation
+    historical_scope: Reference
+    mutation_rule_version: str
+
+    def __post_init__(self) -> None:
+        if not self.mutation_rule_version or not self.mutation_rule_version.strip():
+            raise ValueError(
+                "mutation_rule_version must be non-empty"
+            )
+
 
 @dataclass(frozen=True)
 class HistoricalState:
