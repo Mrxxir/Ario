@@ -281,6 +281,28 @@ class HistoricalMutationCandidate:
 
 
 @dataclass(frozen=True)
+class LineageCandidate:
+    candidate_id: str
+    from_reference: Reference
+    to_reference: Reference
+    proposed_relation_type: str
+    inference_basis: str
+    derivation_reference: Reference
+    provenance: Provenance
+    lineage_rule_version: str
+
+    def __post_init__(self) -> None:
+        if not self.candidate_id or not self.candidate_id.strip():
+            raise ValueError("candidate_id must be non-empty")
+        if not self.proposed_relation_type or not self.proposed_relation_type.strip():
+            raise ValueError("proposed_relation_type must be non-empty")
+        if not self.inference_basis or not self.inference_basis.strip():
+            raise ValueError("inference_basis must be non-empty")
+        if not self.lineage_rule_version or not self.lineage_rule_version.strip():
+            raise ValueError("lineage_rule_version must be non-empty")
+
+
+@dataclass(frozen=True)
 class HistoricalState:
     state_id: str
     claim_id: str

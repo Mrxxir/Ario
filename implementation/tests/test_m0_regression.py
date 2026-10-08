@@ -6,6 +6,7 @@ from core.schema import (
     HistoricalState,
     IndependenceStatus,
     LineageEdge,
+    LineageCandidate,
     Provenance,
     Reference,
     TemporalContext,
@@ -447,6 +448,83 @@ def test_f16_missing_provenance_is_detected():
     )
 
     assert r.violations.count("MISSING_PROVENANCE") == 3
+
+def f07_candidate(
+    candidate_id,
+    basis,
+    rule_version="M0-F07-1.0",
+ ):
+    return LineageCandidate(
+        candidate_id=candidate_id,
+        from_reference=ref(f"FROM-{candidate_id}"),
+        to_reference=ref(f"TO-{candidate_id}"),
+        proposed_relation_type="LINEAGE_CONTINUATION",
+        inference_basis=basis,
+        derivation_reference=ref(f"DER-{candidate_id}"),
+        provenance=prov(f"PROV-{candidate_id}"),
+        lineage_rule_version=rule_version,
+    )
+
+
+
+def test_f07_similarity_candidate_is_inadmissible():
+    candidate = f07_candidate("F07-SIMILARITY", "SIMILARITY")
+
+    r = run(
+        "F07-SIMILARITY-CANDIDATE",
+        AuditInput(lineage_candidates=(candidate,)),
+        rule_versions=("M0-1.0", "M0-F07-1.0",),
+    )
+
+    assert r.verdict == "FAIL"
+    assert "LINEAGE_INADMISSIBLE" in r.violations
+
+
+
+def test_f07_explicit_relation_candidate_is_admissible():
+    candidate = f07_candidate("F07-EXPLICIT", "EXPLICIT_RELATION")
+
+    r = run(
+        "F07-EXPLICIT-CANDIDATE",
+        AuditInput(lineage_candidates=(candidate,)),
+        rule_versions=("M0-1.0", "M0-F07-1.0",),
+    )
+
+    assert r.verdict == "PASS"
+    assert "LINEAGE_INADMISSIBLE" not in r.violations
+    assert "UNKNOWN" not in r.violations
+
+
+
+def test_f07_unsupported_rule_is_unknown():
+    candidate = f07_candidate(
+        "F07-UNSUPPORTED",
+        "EXPLICIT_RELATION",
+        rule_version="M0-F07-9.9",
+    )
+
+    r = run(
+        "F07-UNSUPPORTED-RULE",
+        AuditInput(lineage_candidates=(candidate,)),
+        rule_versions=("M0-1.0", "M0-F07-9.9",),
+    )
+
+    assert r.verdict == "FAIL"
+    assert "UNKNOWN" in r.violations
+
+
+
+def test_f07_undeclared_rule_is_unknown():
+    candidate = f07_candidate("F07-UNDECLARED", "EXPLICIT_RELATION")
+
+    r = run(
+        "F07-UNDECLARED-RULE",
+        AuditInput(lineage_candidates=(candidate,)),
+        rule_versions=("M0-1.0",),
+    )
+
+    assert r.verdict == "FAIL"
+    assert "UNKNOWN" in r.violations
 
 def f05_candidate(
     canonical_id,

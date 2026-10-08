@@ -11,6 +11,7 @@ from .schema import (
     HistoricalState,
     HistoricalMutationCandidate,
     IndependenceStatus,
+    LineageCandidate,
     LineageEdge,
     RetrievalEvent,
     TemporalRelation,
@@ -29,6 +30,7 @@ class AuditInput:
     historical_mutation_candidates: tuple[
         HistoricalMutationCandidate, ...
     ] = ()
+    lineage_candidates: tuple[LineageCandidate, ...] = ()
 
     @property
     def artifacts_examined(self) -> tuple:
@@ -78,6 +80,15 @@ class AuditInput:
                 )
             )
 
+        for candidate in self.lineage_candidates:
+            references.extend(
+                (
+                    candidate.from_reference,
+                    candidate.to_reference,
+                    candidate.derivation_reference,
+                )
+            )
+
         return tuple(references)
 
 
@@ -108,6 +119,12 @@ class AuditEngine:
         else:
             violations.extend(
                 self._check_claim_identity(artifacts.claims)
+            )
+            violations.extend(
+                self._check_lineage_candidates(
+                    artifacts.lineage_candidates,
+                    rule_versions,
+                )
             )
             violations.extend(
                 self._check_provenance(
@@ -342,6 +359,34 @@ class AuditEngine:
             return ["TEMPORALLY_UNRESOLVED"]
 
         return []
+
+    @staticmethod
+    def _check_lineage_candidates(
+        candidates: Iterable[LineageCandidate],
+        rule_versions: tuple[str, ...],
+    ) -> list[str]:
+        violations: list[str] = []
+        supported_rule = "M0-F07-1.0"
+
+        for candidate in candidates:
+            if candidate.lineage_rule_version != supported_rule:
+                violations.append("UNKNOWN")
+                continue
+
+            if candidate.lineage_rule_version not in rule_versions:
+                violations.append("UNKNOWN")
+                continue
+
+            basis = candidate.inference_basis.strip()
+
+            if basis == "SIMILARITY":
+                violations.append("LINEAGE_INADMISSIBLE")
+            elif basis == "EXPLICIT_RELATION":
+                continue
+            else:
+                violations.append("UNKNOWN")
+
+        return violations
 
     @staticmethod
     def _check_historical_mutations(
