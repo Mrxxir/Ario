@@ -289,6 +289,61 @@ def test_f08_retrieval_with_declared_transformation():
     assert "RETRIEVAL_DISCREPANCY" not in r.violations
 
 
+
+def test_f08_retrieval_with_matching_observed_transformation():
+    from core.schema import RetrievalEvent
+
+    event = RetrievalEvent(
+        retrieval_id="RETRIEVAL-F08-MATCHING",
+        source_reference=ref("SOURCE-F08-MATCHING"),
+        retrieved_reference=ref("RETRIEVED-F08-MATCHING"),
+        retrieval_timestamp=TS,
+        transformation_reference=ref("TRANSFORM-F08-MATCHING"),
+        fidelity_status="FAITHFUL",
+        provenance=prov("PROV-F08-MATCHING"),
+        observed_transformation_reference=ref("TRANSFORM-F08-MATCHING"),
+    )
+
+    r = run("F08", AuditInput(retrieval_events=(event,)))
+    assert "RETRIEVAL_DISCREPANCY" not in r.violations
+    assert "UNDECLARED_TRANSFORMATION" not in r.violations
+
+
+def test_f09_retrieval_with_hidden_transformation():
+    from core.schema import RetrievalEvent
+
+    event = RetrievalEvent(
+        retrieval_id="RETRIEVAL-F09-HIDDEN",
+        source_reference=ref("SOURCE-F09-HIDDEN"),
+        retrieved_reference=ref("RETRIEVED-F09-HIDDEN"),
+        retrieval_timestamp=TS,
+        transformation_reference=None,
+        fidelity_status="FAITHFUL",
+        provenance=prov("PROV-F09-HIDDEN"),
+        observed_transformation_reference=ref("TRANSFORM-F09-HIDDEN"),
+    )
+
+    r = run("F09", AuditInput(retrieval_events=(event,)))
+    assert "UNDECLARED_TRANSFORMATION" in r.violations
+
+
+def test_f09_retrieval_with_transformation_discrepancy():
+    from core.schema import RetrievalEvent
+
+    event = RetrievalEvent(
+        retrieval_id="RETRIEVAL-F09-DISCREPANCY",
+        source_reference=ref("SOURCE-F09-DISCREPANCY"),
+        retrieved_reference=ref("RETRIEVED-F09-DISCREPANCY"),
+        retrieval_timestamp=TS,
+        transformation_reference=ref("TRANSFORM-F09-DECLARED"),
+        fidelity_status="FAITHFUL",
+        provenance=prov("PROV-F09-DISCREPANCY"),
+        observed_transformation_reference=ref("TRANSFORM-F09-OBSERVED"),
+    )
+
+    r = run("F09", AuditInput(retrieval_events=(event,)))
+    assert "RETRIEVAL_DISCREPANCY" in r.violations
+
 def test_f10_assessment_with_declared_admissible_evidence():
     from core.schema import Assessment
 

@@ -57,6 +57,9 @@ class AuditInput:
                     event.source_reference,
                     event.retrieved_reference,
                     event.transformation_reference,
+                    *((
+                        event.observed_transformation_reference,
+                    ) if event.observed_transformation_reference is not None else ()),
                 )
             )
 
@@ -246,6 +249,15 @@ class AuditEngine:
         for event in retrieval_events:
             if not event.fidelity_status.strip():
                 violations.append("RETRIEVAL_DISCREPANCY")
+
+            declared = event.transformation_reference
+            observed = event.observed_transformation_reference
+
+            if declared is None and observed is not None:
+                violations.append("UNDECLARED_TRANSFORMATION")
+            elif declared is not None and observed is not None:
+                if declared != observed:
+                    violations.append("RETRIEVAL_DISCREPANCY")
 
         return violations
 

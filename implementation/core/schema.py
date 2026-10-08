@@ -165,6 +165,7 @@ class RetrievalEvent:
     transformation_reference: Reference
     fidelity_status: str
     provenance: Provenance
+    observed_transformation_reference: Reference | None = None
 
     def __post_init__(self) -> None:
         if not self.retrieval_id or not self.retrieval_id.strip():
