@@ -400,3 +400,48 @@ def test_f14_two_states_without_temporal_relation():
     )
 
     assert "TEMPORALLY_UNRESOLVED" in r.violations
+
+
+def test_f16_missing_provenance_is_detected():
+    from core.schema import RetrievalEvent
+
+    missing_state = HistoricalState(
+        state_id="STATE-F16-MISSING",
+        claim_id="CLAIM-M0-14J",
+        state_version="F16",
+        observed_at=TS,
+        state_context=TemporalContext(snapshot_id="F16"),
+        content_reference=ref("CONTENT-F16"),
+        provenance=None,
+    )
+
+    missing_edge = LineageEdge(
+        lineage_id="EDGE-F16-MISSING",
+        from_reference=ref("FROM-F16"),
+        to_reference=ref("TO-F16"),
+        relation_type="EXPLICIT_RELATION",
+        derivation_reference=ref("DER-F16"),
+        admissibility_status="ADMISSIBLE",
+        provenance=None,
+    )
+
+    missing_retrieval = RetrievalEvent(
+        retrieval_id="RETRIEVAL-F16-MISSING",
+        source_reference=ref("SOURCE-F16"),
+        retrieved_reference=ref("RETRIEVED-F16"),
+        retrieval_timestamp=TS,
+        transformation_reference=None,
+        fidelity_status="FAITHFUL",
+        provenance=None,
+    )
+
+    r = run(
+        "F16",
+        AuditInput(
+            historical_states=(missing_state,),
+            lineage_edges=(missing_edge,),
+            retrieval_events=(missing_retrieval,),
+        ),
+    )
+
+    assert r.violations.count("MISSING_PROVENANCE") == 3

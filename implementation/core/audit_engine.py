@@ -97,6 +97,13 @@ class AuditEngine:
                 self._check_claim_identity(artifacts.claims)
             )
             violations.extend(
+                self._check_provenance(
+                    artifacts.historical_states,
+                    artifacts.lineage_edges,
+                    artifacts.retrieval_events,
+                )
+            )
+            violations.extend(
                 self._check_lineage(artifacts.lineage_edges)
             )
             violations.extend(
@@ -154,6 +161,28 @@ class AuditEngine:
                 violations.append("IDENTITY_CONFLICT")
             else:
                 seen.add(claim.claim_id)
+
+        return violations
+
+    @staticmethod
+    def _check_provenance(
+        historical_states: Iterable[HistoricalState],
+        lineage_edges: Iterable[LineageEdge],
+        retrieval_events: Iterable[RetrievalEvent],
+    ) -> list[str]:
+        violations: list[str] = []
+
+        for state in historical_states:
+            if state.provenance is None:
+                violations.append("MISSING_PROVENANCE")
+
+        for edge in lineage_edges:
+            if edge.provenance is None:
+                violations.append("MISSING_PROVENANCE")
+
+        for event in retrieval_events:
+            if event.provenance is None:
+                violations.append("MISSING_PROVENANCE")
 
         return violations
 
