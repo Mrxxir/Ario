@@ -142,12 +142,18 @@ Required conceptual fields:
 - `audit_id`
 - `inspector_id`
 - `inspector_version`
+- `execution_timestamp`
+
 - `configuration_id`
 - `rule_versions`
 - `artifacts_examined`
 - `violations`
 - `verdict`
 - `verdict_basis`
+
+execution_timestamp is execution-context metadata supplied by the audit invocation.
+The deterministic audit engine MUST NOT obtain the current time internally.
+Identical structured inputs, identical versioned rules, and identical execution-context metadata MUST produce the same audit result.
 
 The audit result is an output of the audit process, not independent evidence of the property it evaluates.
 

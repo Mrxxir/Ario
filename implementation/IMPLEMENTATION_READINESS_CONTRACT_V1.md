@@ -263,7 +263,7 @@ The deterministic audit layer MUST:
 Minimum audit outputs should identify:
 
 - inspector/version;
-- execution timestamp or epoch;
+- execution timestamp or epoch supplied as execution-context metadata;
 - configuration identifier;
 - artifacts examined;
 - rule versions;
