@@ -74,7 +74,7 @@ The audit invocation must declare `M0-F15-1.0` in its `rule_versions` before the
 
 V1 supports only these exact, machine-readable semantic labels:
 
-- `LOCAL_RESULT_SUMMARY`: a bounded statement about the supplied audit-result records themselves, such as the count of supplied records whose local verdict equals `PASS`. This says nothing by itself about the truth of the underlying claims. Its only supported rule is `composition_rule_id = M0-F15-LOCAL-SUMMARY` with `composition_rule_version = 1.0`; its scope is limited to the actual supplied records unless all-five coverage is explicitly requested and structurally present.
+- `LOCAL_RESULT_SUMMARY`: a bounded statement about the supplied audit-result records themselves, such as the count of supplied records whose local verdict equals `PASS`. This says nothing by itself about the truth of the underlying claims. Its only supported rule is `composition_rule_id = M0-F15-LOCAL-SUMMARY` with `composition_rule_version = 1.0`; its scope is limited to the actual supplied records unless all-five coverage is explicitly requested and structurally present. The summary reports the supplied `AuditResult` fields and caller-declared bindings; it does not independently authenticate that an input truly belongs to the declared IRG or that its local scope is semantically sufficient.
 - `CLAIM_TRUTH`: a request to conclude that a Claim is true from local audit results.
 - `UNKNOWN`: a requested output semantic that the implementation cannot classify under this v1 contract.
 
@@ -84,7 +84,7 @@ Other semantics—including `SAME_ENTITY`, `CONSCIOUSNESS`, confidence, ranking,
 
 ## 6. Normative invariants
 
-**F15-I1 — No local-to-global truth escalation.** When `M0-F15-1.0` is declared, a request with `requested_output_semantics = CLAIM_TRUTH` is rejected as `COMPOSITION_FORBIDDEN`, regardless of whether the input local verdicts are all `PASS`, mixed, or contain `FAIL`, and regardless of any caller-supplied composition rule ID. An unsupported rule ID cannot authorize truth; the direct truth-escalation request remains forbidden.
+**F15-I1 — No local-to-global truth escalation.** When `M0-F15-1.0` is declared and the request has non-empty, unambiguous inputs, a request with `requested_output_semantics = CLAIM_TRUTH` is rejected as `COMPOSITION_FORBIDDEN`, regardless of whether the input local verdicts are all `PASS`, mixed, or contain `FAIL`, and regardless of any caller-supplied composition rule ID. An unsupported rule ID cannot authorize truth; the direct truth-escalation request remains forbidden.
 
 **F15-I2 — No self-authorization.** A request cannot authorize its own truth mapping merely by supplying a rule ID, rule version, rationale, or declaration that the rule is admissible. The v1 implementation has no allowlist entry that authorizes local verdicts to establish global Claim truth.
 
@@ -105,6 +105,8 @@ Other semantics—including `SAME_ENTITY`, `CONSCIOUSNESS`, confidence, ranking,
 - No positive result may mean “the Claim is true.” A `PASS` from the composition firewall, if used to describe a bounded summary request, means only that the implemented structural composition checks reported no violation for that summary request.
 
 The F15 result must preserve the distinction between the firewall's local structural verdict and the truth status of any underlying Claim.
+
+**Classification precedence:** (1) if F15 is not declared, or primary inputs/rule identity/required scope are missing or ambiguous, return `UNKNOWN`; (2) after the request is non-empty and unambiguous, a declared F15 request for `CLAIM_TRUTH` returns `COMPOSITION_FORBIDDEN`; (3) only a well-formed `LOCAL_RESULT_SUMMARY` with the exact supported summary rule may be structurally accepted. No earlier or later step may convert an unresolved state into a positive result.
 
 ## 8. Minimum adversarial test matrix
 
