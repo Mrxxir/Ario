@@ -52,6 +52,8 @@ def parse_task(payload: Any) -> dict:
         if not {"step_id", "tool"} <= set(action):
             raise AgentRequestError(f"actions[{index}] requires step_id and tool")
         step_id, tool = action["step_id"], action["tool"]
+        if not isinstance(tool, str):
+            raise AgentRequestError(f"actions[{index}].tool must be a string")
         if not isinstance(step_id, str) or not step_id.strip() or step_id in seen:
             raise AgentRequestError(f"actions[{index}].step_id must be unique and non-empty")
         if tool not in ALLOWED_TOOLS:
