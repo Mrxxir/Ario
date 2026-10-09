@@ -521,6 +521,66 @@ def _run_task_locked(task: dict, root: Path, ledger: Path) -> dict:
     return result
 
 
+def inspect_execution_lock(ledger_path: str | Path) -> dict:
+    """Read-only inspection of the exclusive task lock beside a ledger."""
+    ledger = Path(ledger_path).resolve()
+    lock_path = ledger.with_name(ledger.name + ".lock")
+    try:
+        raw = lock_path.read_bytes()
+    except FileNotFoundError:
+        return {
+            "status": "NO_LOCK",
+            "lock_path": str(lock_path),
+            "write_performed": False,
+            "automatic_removal": False,
+        }
+    except OSError as exc:
+        return {
+            "status": "UNKNOWN",
+            "lock_path": str(lock_path),
+            "error": str(exc),
+            "write_performed": False,
+            "automatic_removal": False,
+        }
+
+    result = {
+        "status": "LOCK_PRESENT",
+        "lock_path": str(lock_path),
+        "byte_count": len(raw),
+        "sha256": hashlib.sha256(raw).hexdigest(),
+        "write_performed": False,
+        "automatic_removal": False,
+        "next_step": (
+            "Inspect the recorded PID and confirm no matching process is active before any "
+            "manual removal. Lock presence alone does not establish that the process is stale."
+        ),
+    }
+    try:
+        record = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        result["status"] = "UNKNOWN"
+        result["error"] = "lock content is not valid UTF-8 JSON"
+        return result
+    if (
+        not isinstance(record, dict)
+        or not isinstance(record.get("pid"), int)
+        or isinstance(record.get("pid"), bool)
+        or record["pid"] <= 0
+        or not isinstance(record.get("task_id"), str)
+        or not record["task_id"].strip()
+        or not isinstance(record.get("started_at"), str)
+    ):
+        result["status"] = "UNKNOWN"
+        result["error"] = "lock record has an invalid shape"
+        return result
+    result["lock_record"] = {
+        "pid": record["pid"],
+        "task_id": record["task_id"],
+        "started_at": record["started_at"],
+    }
+    return result
+
+
 def inspect_task_history(task_id: str, ledger_path: str | Path) -> dict:
     """Read-only crash-recovery assessment. Never resumes or replays task actions."""
     if not isinstance(task_id, str) or not task_id.strip():
