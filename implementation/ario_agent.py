@@ -65,7 +65,7 @@ def parse_task(payload: Any) -> dict:
     seen: set[str] = set()
     normalized = []
     for index, action in enumerate(actions):
-        if not isinstance(action, dict) or set(action) - {"step_id", "tool", "path", "content", "expected_sha256", "backup_path", "expected_text", "start_line"}:
+        if not isinstance(action, dict) or set(action) - {"step_id", "tool", "path", "content", "expected_sha256", "backup_path", "expected_text", "start_line", "expected_next_start_line", "expected_truncated"}:
             raise AgentRequestError(f"actions[{index}] has an invalid shape")
         if not {"step_id", "tool"} <= set(action):
             raise AgentRequestError(f"actions[{index}] requires step_id and tool")
@@ -113,9 +113,21 @@ def parse_task(payload: Any) -> dict:
             start_line = action["start_line"]
             if isinstance(start_line, bool) or not isinstance(start_line, int) or start_line < 1:
                 raise AgentRequestError(f"actions[{index}].start_line must be a positive integer")
+        if "expected_next_start_line" in action or "expected_truncated" in action:
+            if tool != "read_text":
+                raise AgentRequestError(f"actions[{index}] chunk expectations are valid only for read_text")
+            if not {"expected_next_start_line", "expected_truncated"} <= set(action):
+                raise AgentRequestError(
+                    f"actions[{index}] must provide both expected_next_start_line and expected_truncated"
+                )
+            expected_next = action["expected_next_start_line"]
+            if isinstance(expected_next, bool) or not isinstance(expected_next, int) or expected_next < 1:
+                raise AgentRequestError(f"actions[{index}].expected_next_start_line must be a positive integer")
+            if not isinstance(action["expected_truncated"], bool):
+                raise AgentRequestError(f"actions[{index}].expected_truncated must be a boolean")
         seen.add(step_id)
         normalized_action = {"step_id": step_id, "tool": tool}
-        for field in ("path", "content", "expected_sha256", "backup_path", "expected_text", "start_line"):
+        for field in ("path", "content", "expected_sha256", "backup_path", "expected_text", "start_line", "expected_next_start_line", "expected_truncated"):
             if field in action:
                 normalized_action[field] = action[field]
         normalized.append(normalized_action)
@@ -355,6 +367,26 @@ def _inspect_backup(action: dict, backup_root: Path) -> dict:
             "sha256": hashlib.sha256(raw).hexdigest()}
 
 
+def _validate_read_text_observation(action: dict, observation: dict) -> dict:
+    """Fail closed if a bounded read does not match its precomputed chunk boundary."""
+    errors = []
+    if "expected_next_start_line" in action:
+        if observation["next_start_line"] != action["expected_next_start_line"]:
+            errors.append(
+                f"read_text next_start_line mismatch: expected {action['expected_next_start_line']}, "
+                f"observed {observation['next_start_line']}"
+            )
+        if observation["truncated"] is not action["expected_truncated"]:
+            errors.append(
+                f"read_text truncated mismatch: expected {action['expected_truncated']}, "
+                f"observed {observation['truncated']}"
+            )
+    if errors:
+        observation["ok"] = False
+        observation["error"] = "; ".join(errors)
+    return observation
+
+
 def execute_action(action: dict, root: Path, backup_root: Path | None = None) -> dict:
     tool = action["tool"]
     if tool == "file_fingerprint":
@@ -463,11 +495,11 @@ def execute_action(action: dict, root: Path, backup_root: Path | None = None) ->
             while current_line < start_line:
                 skipped = stream.readline(MAX_READ_BYTES + 1)
                 if not skipped:
-                    return {
+                    return _validate_read_text_observation(action, {
                         "ok": True, "path": action["path"], "content": "",
                         "start_line": start_line, "next_start_line": start_line,
                         "bytes": 0, "truncated": False,
-                    }
+                    })
                 if len(skipped) > MAX_READ_BYTES:
                     raise AgentRequestError(
                         f"read_text encountered a line longer than {MAX_READ_BYTES} bytes while seeking start_line"
@@ -497,11 +529,11 @@ def execute_action(action: dict, root: Path, backup_root: Path | None = None) ->
             decoded = bytes(content).decode(encoding)
         except UnicodeDecodeError as exc:
             raise AgentRequestError("read_text chunk is not valid UTF-8 text") from exc
-        return {
+        return _validate_read_text_observation(action, {
             "ok": True, "path": action["path"], "content": decoded,
             "start_line": start_line, "next_start_line": next_start_line,
             "bytes": len(content), "truncated": truncated,
-        }
+        })
     if tool == "git_status":
         result = _run(["git", "status", "--short", "--branch"], root)
     elif tool == "compile_python":
