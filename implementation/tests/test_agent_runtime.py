@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ario_agent import AgentRequestError, parse_task, run_task
+from ario_agent import AgentRequestError, inspect_task_history, parse_task, run_task
 
 
 class BoundedAgentTests(unittest.TestCase):
@@ -274,6 +274,45 @@ class BoundedAgentTests(unittest.TestCase):
                 "step_id": "s1", "tool": "verify_text", "path": "result.txt",
                 "expected_text": "x", "content": "not allowed",
             }]))
+
+    def test_history_inspection_marks_unfinished_task_incomplete_without_resume(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            ledger = root / "audit.jsonl"
+            ledger.write_text("\n".join([
+                json.dumps({"event": "TASK_STARTED", "task_id": "CRASH-1", "goal": "edit file"}),
+                json.dumps({"event": "STEP_OBSERVED", "task_id": "CRASH-1", "step_id": "s1",
+                            "tool": "replace_text", "status": "SUCCEEDED", "timestamp": "t1"}),
+            ]) + "\n", encoding="utf-8")
+            before = ledger.read_bytes()
+            result = inspect_task_history("CRASH-1", ledger)
+            self.assertEqual(result["status"], "INCOMPLETE")
+            self.assertEqual(result["next_step_state"], "UNKNOWN")
+            self.assertFalse(result["automatic_resume"])
+            self.assertFalse(result["write_performed"])
+            self.assertEqual(result["observed_steps"][0]["step_id"], "s1")
+            self.assertEqual(ledger.read_bytes(), before)
+
+    def test_history_inspection_recognizes_terminal_task(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = Path(directory) / "audit.jsonl"
+            ledger.write_text("\n".join([
+                json.dumps({"event": "TASK_STARTED", "task_id": "DONE-1", "goal": "inspect"}),
+                json.dumps({"event": "TASK_FINISHED", "task_id": "DONE-1", "status": "COMPLETED"}),
+            ]) + "\n", encoding="utf-8")
+            result = inspect_task_history("DONE-1", ledger)
+            self.assertEqual(result["status"], "COMPLETED")
+            self.assertEqual(result["next_step_state"], "NONE_TERMINAL_TASK")
+            self.assertFalse(result["automatic_resume"])
+
+    def test_history_inspection_fails_closed_on_malformed_ledger(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = Path(directory) / "audit.jsonl"
+            ledger.write_text('{"event":"TASK_STARTED","task_id":"X"}\nnot-json\n', encoding="utf-8")
+            result = inspect_task_history("X", ledger)
+            self.assertEqual(result["status"], "UNKNOWN")
+            self.assertIn("malformed JSONL", result["error"])
+            self.assertFalse(result["automatic_resume"])
 
     def test_stops_after_first_failed_observation(self):
         with tempfile.TemporaryDirectory() as directory:
