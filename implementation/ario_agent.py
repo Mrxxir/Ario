@@ -14,7 +14,7 @@ from typing import Any
 
 MAX_STEPS = 8
 MAX_READ_BYTES = 20_000
-ALLOWED_TOOLS = {"inspect_directory", "read_text", "file_fingerprint", "inspect_backup", "git_status", "compile_python", "run_tests", "replace_text", "restore_backup", "verify_text"}
+ALLOWED_TOOLS = {"inspect_directory", "read_text", "file_fingerprint", "inspect_backup", "recovery_preflight", "git_status", "compile_python", "run_tests", "replace_text", "restore_backup", "verify_text"}
 
 
 class AgentRequestError(ValueError):
@@ -72,7 +72,7 @@ def parse_task(payload: Any) -> dict:
             raise AgentRequestError(f"actions[{index}].step_id must be unique and non-empty")
         if tool not in ALLOWED_TOOLS:
             raise AgentRequestError(f"actions[{index}].tool is not allowlisted")
-        if tool in {"inspect_directory", "read_text", "file_fingerprint", "inspect_backup", "compile_python", "replace_text", "restore_backup", "verify_text"}:
+        if tool in {"inspect_directory", "read_text", "file_fingerprint", "inspect_backup", "recovery_preflight", "compile_python", "replace_text", "restore_backup", "verify_text"}:
             if not isinstance(action.get("path"), str):
                 raise AgentRequestError(f"actions[{index}] requires a relative path")
         elif "path" in action:
@@ -96,6 +96,11 @@ def parse_task(payload: Any) -> dict:
                 raise AgentRequestError(f"actions[{index}].expected_text must be a string")
             if "content" in action or "expected_sha256" in action or "backup_path" in action:
                 raise AgentRequestError(f"actions[{index}] verify_text accepts only expected_text")
+        elif tool == "recovery_preflight":
+            if not isinstance(action.get("backup_path"), str) or not action["backup_path"].strip():
+                raise AgentRequestError(f"actions[{index}].backup_path must be a relative backup path")
+            if "content" in action or "expected_sha256" in action or "expected_text" in action:
+                raise AgentRequestError(f"actions[{index}] recovery_preflight accepts only backup_path")
         elif "content" in action or "expected_sha256" in action or "backup_path" in action or "expected_text" in action:
             raise AgentRequestError(f"actions[{index}] content/hash/backup/expected_text fields are not valid for this tool")
         seen.add(step_id)
@@ -309,6 +314,51 @@ def execute_action(action: dict, root: Path, backup_root: Path | None = None) ->
         if backup_root is None:
             raise AgentRequestError("inspect_backup requires an external backup directory")
         return _inspect_backup(action, backup_root)
+    if tool == "recovery_preflight":
+        if backup_root is None:
+            raise AgentRequestError("recovery_preflight requires an external backup directory")
+        target = _inside(root, action["path"])
+        if not target.is_file() or target.is_symlink():
+            raise AgentRequestError("recovery_preflight requires an existing regular target file")
+        candidate = Path(action["backup_path"])
+        if candidate.is_absolute() or any(part == ".." for part in candidate.parts):
+            raise AgentRequestError("backup_path must remain beneath the backup directory")
+        resolved_backup_root = backup_root.resolve()
+        probe = resolved_backup_root
+        for part in candidate.parts:
+            if part in ("", "."):
+                continue
+            probe = probe / part
+            if probe.is_symlink():
+                raise AgentRequestError("symbolic-link backup paths are not permitted")
+        backup = probe.resolve()
+        try:
+            backup.relative_to(resolved_backup_root)
+        except ValueError as exc:
+            raise AgentRequestError("backup_path escapes the backup directory") from exc
+        if not backup.is_file():
+            raise AgentRequestError("recovery_preflight requires an existing regular backup file")
+        target_bytes = target.read_bytes()
+        backup_bytes = backup.read_bytes()
+        if len(target_bytes) > MAX_READ_BYTES or len(backup_bytes) > MAX_READ_BYTES:
+            raise AgentRequestError(f"recovery_preflight is limited to {MAX_READ_BYTES} bytes per file")
+        target_hash = hashlib.sha256(target_bytes).hexdigest()
+        backup_hash = hashlib.sha256(backup_bytes).hexdigest()
+        identical = target_bytes == backup_bytes
+        return {
+            "ok": True,
+            "assessment": "IDENTICAL_CONTENT" if identical else "DIFFERENT_CONTENT",
+            "write_performed": False,
+            "automatic_restore": False,
+            "target_path": str(target.relative_to(root)),
+            "target_bytes": len(target_bytes),
+            "target_sha256": target_hash,
+            "backup_path": str(candidate),
+            "backup_bytes": len(backup_bytes),
+            "backup_sha256": backup_hash,
+            "content_identical": identical,
+            "next_step": "No write performed. Review these hashes and explicitly authorize a separate restore_backup action if restoration is intended."
+        }
     if tool == "verify_text":
         target = _inside(root, action["path"])
         if not target.is_file():
