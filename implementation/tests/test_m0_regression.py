@@ -728,3 +728,195 @@ def test_f05_undeclared_rule_is_unknown():
     assert r.verdict == "FAIL"
     assert "UNKNOWN" in r.violations
     assert "HISTORY_MUTATION" not in r.violations
+
+
+# F11: audit results are a distinct artifact kind, never assessment evidence.
+def _f11_assessment(assessment_id, references):
+    from core.schema import Assessment
+
+    return Assessment(
+        assessment_id=assessment_id,
+        assessment_version="1",
+        rule_version="M0-F11-1.0",
+        admissible_evidence_refs=tuple(references),
+        condition_evaluation="SUPPORTED",
+        assessment_basis="F11 regression fixture",
+        scope="F11",
+    )
+
+
+def _f11_audit_result(audit_id, verdict="PASS", examined=()):
+    from core.schema import AuditResult
+
+    return AuditResult(
+        audit_id=audit_id,
+        inspector_id="F11-TEST-INSPECTOR",
+        inspector_version="1",
+        execution_timestamp=TS,
+        configuration_id="F11-TEST",
+        rule_versions=("M0-F11-1.0",),
+        artifacts_examined=tuple(examined),
+        violations=() if verdict == "PASS" else ("TEST_FIXTURE_VIOLATION",),
+        verdict=verdict,
+        verdict_basis="Fixture only; not a truth claim",
+    )
+
+
+def test_f11_a_real_evidence_reference_remains_admissible():
+    ev = evidence("E-F11-A", ("OBS-F11-A",), IndependenceStatus.INDEPENDENT)
+    assessment = _f11_assessment("ASSESS-F11-A", (ref("E-F11-A"),))
+
+    r = run("F11-A", AuditInput(evidence=(ev,), assessments=(assessment,)))
+
+    assert r.verdict == "PASS"
+    assert "COMPOSITION_FORBIDDEN" not in r.violations
+    assert "EVIDENCE_INADMISSIBLE" not in r.violations
+
+
+def test_f11_b_audit_result_id_in_evidence_position_is_forbidden():
+    result = _f11_audit_result("AUDIT-F11-B", "PASS")
+    assessment = _f11_assessment("ASSESS-F11-B", (ref("AUDIT-F11-B"),))
+
+    r = run(
+        "F11-B",
+        AuditInput(assessments=(assessment,), prior_audit_results=(result,)),
+    )
+
+    assert r.verdict == "FAIL"
+    assert "COMPOSITION_FORBIDDEN" in r.violations
+
+
+def test_f11_c_caller_label_cannot_retype_audit_result_as_evidence():
+    result = _f11_audit_result("AUDIT-F11-C", "PASS")
+    misleading_reference = Reference("AUDIT-F11-C", "EVIDENCE")
+    assessment = _f11_assessment("ASSESS-F11-C", (misleading_reference,))
+
+    r = run(
+        "F11-C",
+        AuditInput(assessments=(assessment,), prior_audit_results=(result,)),
+    )
+
+    assert "COMPOSITION_FORBIDDEN" in r.violations
+    assert r.verdict == "FAIL"
+
+
+def test_f11_d_valid_evidence_does_not_hide_a_verdict_reference():
+    ev = evidence("E-F11-D", ("OBS-F11-D",), IndependenceStatus.INDEPENDENT)
+    result = _f11_audit_result("AUDIT-F11-D", "PASS")
+    assessment = _f11_assessment(
+        "ASSESS-F11-D",
+        (ref("E-F11-D"), ref("AUDIT-F11-D")),
+    )
+
+    r = run(
+        "F11-D",
+        AuditInput(
+            evidence=(ev,),
+            assessments=(assessment,),
+            prior_audit_results=(result,),
+        ),
+    )
+
+    assert "COMPOSITION_FORBIDDEN" in r.violations
+    assert "EVIDENCE_INADMISSIBLE" not in r.violations
+    assert r.verdict == "FAIL"
+
+
+def test_f11_e_unknown_evidence_reference_cannot_pass():
+    assessment = _f11_assessment("ASSESS-F11-E", (ref("UNKNOWN-F11-E"),))
+
+    r = run("F11-E", AuditInput(assessments=(assessment,)))
+
+    assert "EVIDENCE_INADMISSIBLE" in r.violations
+    assert r.verdict != "PASS"
+
+
+def test_f11_f_separately_recorded_audit_result_is_not_itself_a_violation():
+    result = _f11_audit_result("AUDIT-F11-F", "PASS")
+
+    r = run("F11-F", AuditInput(prior_audit_results=(result,)))
+
+    assert "COMPOSITION_FORBIDDEN" not in r.violations
+    assert r.verdict == "PASS"
+    assert any(
+        item.reference_id == "AUDIT-F11-F"
+        and item.reference_type == "AUDIT_RESULT"
+        for item in r.artifacts_examined
+    )
+
+
+def test_f11_g_a_verdict_does_not_inflate_its_underlying_observation():
+    ev = evidence("E-F11-G", ("OBS-F11-G",), IndependenceStatus.INDEPENDENT)
+    result = _f11_audit_result(
+        "AUDIT-F11-G",
+        "PASS",
+        examined=(Reference("OBS-F11-G", "OBSERVATION"),),
+    )
+
+    r = run(
+        "F11-G",
+        AuditInput(evidence=(ev,), prior_audit_results=(result,)),
+    )
+
+    assert "EVIDENCE_INFLATION" not in r.violations
+    assert r.verdict == "PASS"
+
+
+def test_f11_h_verdict_polarity_does_not_change_artifact_type_classification():
+    outcomes = []
+    for verdict in ("PASS", "FAIL"):
+        result = _f11_audit_result(f"AUDIT-F11-H-{verdict}", verdict)
+        assessment = _f11_assessment(
+            f"ASSESS-F11-H-{verdict}",
+            (ref(f"AUDIT-F11-H-{verdict}"),),
+        )
+        r = run(
+            f"F11-H-{verdict}",
+            AuditInput(
+                assessments=(assessment,),
+                prior_audit_results=(result,),
+            ),
+        )
+        outcomes.append(r.violations)
+        assert "COMPOSITION_FORBIDDEN" in r.violations
+
+    assert outcomes[0] == outcomes[1]
+
+
+def test_f11_false_positive_control_allows_evidence_ids_containing_keywords():
+    evidence_id = "PASS-AUDIT-VERDICT-EVIDENCE"
+    ev = evidence(
+        evidence_id,
+        ("OBS-F11-FALSE-POSITIVE",),
+        IndependenceStatus.INDEPENDENT,
+    )
+    assessment = _f11_assessment(
+        "ASSESS-F11-FALSE-POSITIVE",
+        (ref(evidence_id),),
+    )
+
+    r = run(
+        "F11-FALSE-POSITIVE",
+        AuditInput(evidence=(ev,), assessments=(assessment,)),
+    )
+
+    assert "COMPOSITION_FORBIDDEN" not in r.violations
+    assert "EVIDENCE_INADMISSIBLE" not in r.violations
+    assert r.verdict == "PASS"
+
+
+def test_f11_ambiguous_duplicate_evidence_ids_remain_unknown():
+    first = evidence("E-F11-AMBIGUOUS", ("OBS-F11-AMBIGUOUS-1",), IndependenceStatus.INDEPENDENT)
+    second = evidence("E-F11-AMBIGUOUS", ("OBS-F11-AMBIGUOUS-2",), IndependenceStatus.INDEPENDENT)
+    assessment = _f11_assessment(
+        "ASSESS-F11-AMBIGUOUS",
+        (ref("E-F11-AMBIGUOUS"),),
+    )
+
+    r = run(
+        "F11-AMBIGUOUS",
+        AuditInput(evidence=(first, second), assessments=(assessment,)),
+    )
+
+    assert "UNKNOWN" in r.violations
+    assert r.verdict == "FAIL"
