@@ -1,0 +1,26 @@
+name: Implementation Regression
+
+on:
+  pull_request:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  m0-regression:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: implementation
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install test runner
+        run: python -m pip install --upgrade pip pytest
+      - name: Run M0 regression suite
+        run: python -m pytest -q tests/test_m0_regression.py
