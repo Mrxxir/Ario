@@ -98,6 +98,7 @@ class LocalOllamaPlannerTests(unittest.TestCase):
             second["task"]["goal"] = "Review bounded implementation evidence"
             second["task"]["task_id"] = proposed["stages"][0]["task"]["task_id"]
             second["task"]["actions"][0]["step_id"] = proposed["stages"][0]["task"]["actions"][0]["step_id"]
+            second["task"]["actions"][0]["path"] = "notes.txt"
             second["when"] = {"stage_id": "inspect", "status": "COMPLETED"}
             proposed["stages"].append(second)
             urlopen.return_value = ollama_response(proposed)
