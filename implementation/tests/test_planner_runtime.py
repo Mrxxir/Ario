@@ -51,7 +51,27 @@ class LocalOllamaPlannerTests(unittest.TestCase):
             observation = build_observation(root)
             self.assertIn({"path": "private.txt", "kind": "file"}, observation["entries"])
             self.assertNotIn("secret body must not be sent", json.dumps(observation))
-            self.assertIn("no file contents were read", observation["note"])
+            self.assertIn("does not read arbitrary file contents", observation["note"])
+
+    def test_planning_context_reads_only_bounded_allowlisted_source_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            implementation = root / "implementation"
+            implementation.mkdir()
+            (implementation / "ario_agent.py").write_text(
+                "def safe_runtime():\\n    return 'bounded-source-evidence'\\n",
+                encoding="utf-8",
+            )
+            (root / "private.txt").write_text("DO NOT SEND THIS SECRET", encoding="utf-8")
+            observation = build_observation(root)
+            context = observation["planning_context"]
+            self.assertEqual([item["path"] for item in context], ["implementation/ario_agent.py"])
+            self.assertIn("bounded-source-evidence", context[0]["content"])
+            self.assertNotIn("DO NOT SEND THIS SECRET", json.dumps(observation))
+            self.assertLessEqual(
+                sum(len(item["content"]) for item in context),
+                ario_planner.MAX_CONTEXT_TOTAL_CHARS,
+            )
 
     @patch("ario_planner.urllib.request.urlopen")
     def test_valid_plan_is_schema_checked_and_runtime_ids_are_local(self, urlopen):
