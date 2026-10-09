@@ -263,6 +263,32 @@ def _reject_placeholder_values(workflow: dict) -> None:
             check(criterion.get("criterion_id"), f"stages[{stage_index}].task.success_criteria[{criterion_index}].criterion_id")
 
 
+
+def _validate_plan_quality(workflow: dict, observation: dict) -> None:
+    """Reject structurally valid plans that add no source-grounded engineering evidence."""
+    context = observation.get("planning_context", [])
+    seen_actions: set[str] = set()
+    non_inventory_action = False
+    for stage_index, stage in enumerate(workflow.get("stages", [])):
+        task = stage["task"]
+        for action_index, action in enumerate(task["actions"]):
+            if action["tool"] != "inspect_directory":
+                non_inventory_action = True
+            signature_data = {key: value for key, value in action.items() if key != "step_id"}
+            signature = json.dumps(signature_data, sort_keys=True, ensure_ascii=False)
+            if signature in seen_actions:
+                raise AgentRequestError(
+                    f"plan quality check failed: stages[{stage_index}].task.actions[{action_index}] "
+                    "duplicates an action already declared by an earlier stage; each stage must add distinct evidence"
+                )
+            seen_actions.add(signature)
+    if context and not non_inventory_action:
+        raise AgentRequestError(
+            "plan quality check failed: every action only lists directories despite available allowlisted source/test context; "
+            "propose a bounded source-grounded step such as read_text, run_tests, compile_python, or file_fingerprint"
+        )
+
+
 def _validate_paths(workflow: dict, root: Path) -> None:
     for stage in workflow["stages"]:
         task = stage["task"]
@@ -344,6 +370,7 @@ def request_plan(
         try:
             proposed = _assign_local_identifiers(proposed, goal)
             workflow = parse_workflow(proposed)
+            _validate_plan_quality(workflow, observation)
             break
         except AgentRequestError as exc:
             if "stage_id values are ambiguous" in str(exc):

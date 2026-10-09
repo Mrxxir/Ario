@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 from ario_agent import AgentRequestError
 import ario_planner
-from ario_planner import _local_ollama_endpoint, build_observation, request_plan
+from ario_planner import _local_ollama_endpoint, _validate_plan_quality, build_observation, request_plan
 
 
 def ollama_response(workflow):
@@ -98,6 +98,7 @@ class LocalOllamaPlannerTests(unittest.TestCase):
             second["task"]["goal"] = "Review bounded implementation evidence"
             second["task"]["task_id"] = proposed["stages"][0]["task"]["task_id"]
             second["task"]["actions"][0]["step_id"] = proposed["stages"][0]["task"]["actions"][0]["step_id"]
+            second["task"]["actions"][0]["path"] = "notes.txt"
             second["when"] = {"stage_id": "inspect", "status": "COMPLETED"}
             proposed["stages"].append(second)
             urlopen.return_value = ollama_response(proposed)
@@ -170,6 +171,27 @@ class LocalOllamaPlannerTests(unittest.TestCase):
             urlopen.return_value = ollama_response(template)
             with self.assertRaisesRegex(AgentRequestError, "unresolved template placeholder"):
                 request_plan("Inspect repository", directory)
+
+    def test_plan_quality_rejects_directory_only_plan_when_source_context_exists(self):
+        workflow = self.valid_workflow()
+        observation = {"planning_context": [{"path": "implementation/ario_agent.py", "content": "def example(): pass"}]}
+        with self.assertRaisesRegex(AgentRequestError, "only lists directories"):
+            _validate_plan_quality(workflow, observation)
+
+    def test_plan_quality_rejects_repeated_action_across_stages(self):
+        workflow = self.valid_workflow()
+        second = json.loads(json.dumps(workflow["stages"][0]))
+        second["stage_id"] = "review"
+        second["task"]["task_id"] = "TASK-SECOND"
+        second["task"]["actions"][0]["step_id"] = "different-step-id"
+        second["task"]["actions"][0]["tool"] = "read_text"
+        second["task"]["actions"][0]["path"] = "implementation/ario_agent.py"
+        workflow["stages"][0]["task"]["actions"][0] = {
+            "step_id": "step-one", "tool": "read_text", "path": "implementation/ario_agent.py"
+        }
+        workflow["stages"].append(second)
+        with self.assertRaisesRegex(AgentRequestError, "duplicates an action"):
+            _validate_plan_quality(workflow, {"planning_context": []})
 
     def test_timeout_must_be_within_supported_bounds(self):
         with tempfile.TemporaryDirectory() as directory:
