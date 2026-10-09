@@ -120,11 +120,23 @@ class AuditEngine:
 
         violations: list[str] = []
 
-        if not artifacts.artifacts_examined:
+        has_primary_artifacts = any(
+            (
+                artifacts.claims,
+                artifacts.historical_states,
+                artifacts.lineage_edges,
+                artifacts.retrieval_events,
+                artifacts.evidence,
+                artifacts.assessments,
+                artifacts.historical_mutation_candidates,
+                artifacts.lineage_candidates,
+            )
+        )
+        if not has_primary_artifacts:
             verdict = "UNKNOWN"
             verdict_basis = (
-                "No auditable artifacts were supplied; "
-                "no positive structural conclusion is permitted."
+                "No primary artifacts for a new audit were supplied; "
+                "prior audit results alone do not support a new verdict."
             )
         else:
             violations.extend(
