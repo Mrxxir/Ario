@@ -526,5 +526,77 @@ class BoundedAgentTests(unittest.TestCase):
         with self.assertRaisesRegex(AgentRequestError, "exactly criterion_id"):
             parse_task(malformed)
 
+
+    def test_failed_step_runs_only_declared_read_only_diagnostics_and_remains_stopped(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "present.txt"
+            target.write_text("evidence", encoding="utf-8")
+            ledger = root / "audit.jsonl"
+            task = {
+                **self.task([{
+                    "step_id": "missing-read", "tool": "read_text", "path": "missing.txt"
+                }]),
+                "failure_diagnostics": [
+                    {"step_id": "inspect-root", "tool": "inspect_directory", "path": "."},
+                    {"step_id": "fingerprint-evidence", "tool": "file_fingerprint", "path": "present.txt"},
+                ],
+            }
+
+            result = run_task(task, root, ledger)
+
+            self.assertEqual(result["status"], "STOPPED")
+            self.assertEqual(len(result["steps"]), 1)
+            self.assertEqual([item["status"] for item in result["failure_diagnostics"]],
+                             ["SUCCEEDED", "SUCCEEDED"])
+            self.assertEqual(result["failure_diagnostics"][1]["observation"]["sha256"],
+                             hashlib.sha256(b"evidence").hexdigest())
+            events = [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
+            self.assertEqual(
+                len([event for event in events if event["event"] == "FAILURE_DIAGNOSTIC_OBSERVED"]), 2
+            )
+            self.assertEqual(target.read_text(encoding="utf-8"), "evidence")
+            self.assertEqual(events[-1]["status"], "STOPPED")
+
+    def test_failure_diagnostics_reject_writes_before_any_task_action(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "notes.txt"
+            target.write_text("unchanged", encoding="utf-8")
+            ledger = root / "audit.jsonl"
+            task = {
+                **self.task([{
+                    "step_id": "read", "tool": "read_text", "path": "notes.txt"
+                }]),
+                "failure_diagnostics": [{
+                    "step_id": "write", "tool": "replace_text", "path": "notes.txt",
+                    "content": "changed", "expected_sha256": hashlib.sha256(b"unchanged").hexdigest(),
+                }],
+            }
+
+            with self.assertRaisesRegex(AgentRequestError, "must be read-only"):
+                run_task(task, root, ledger)
+
+            self.assertEqual(target.read_text(encoding="utf-8"), "unchanged")
+            self.assertFalse(ledger.exists())
+
+    def test_failure_diagnostics_reject_workspace_escape_before_any_action(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            ledger = root / "audit.jsonl"
+            task = {
+                **self.task([{
+                    "step_id": "read", "tool": "git_status"
+                }]),
+                "failure_diagnostics": [{
+                    "step_id": "escape", "tool": "read_text", "path": "../outside.txt"
+                }],
+            }
+
+            with self.assertRaisesRegex(AgentRequestError, "escapes the configured workspace"):
+                run_task(task, root, ledger)
+
+            self.assertFalse(ledger.exists())
+
 if __name__ == "__main__":
     unittest.main()

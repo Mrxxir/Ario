@@ -50,10 +50,10 @@ def parse_task(payload: Any) -> dict:
     if not isinstance(payload, dict):
         raise AgentRequestError("task must be a JSON object")
     required_fields = {"task_id", "goal", "actions"}
-    allowed_fields = required_fields | {"success_criteria"}
+    allowed_fields = required_fields | {"success_criteria", "failure_diagnostics"}
     if not required_fields <= set(payload) or set(payload) - allowed_fields:
         raise AgentRequestError(
-            "task must contain exactly task_id, goal, actions, and optional success_criteria"
+            "task must contain exactly task_id, goal, actions, and optional success_criteria/failure_diagnostics only"
         )
     if not isinstance(payload["task_id"], str) or not payload["task_id"].strip():
         raise AgentRequestError("task_id must be a non-empty string")
@@ -140,6 +140,25 @@ def parse_task(payload: Any) -> dict:
                 "expected_text": criterion["expected_text"],
             })
         normalized_task["success_criteria"] = normalized_criteria
+    if "failure_diagnostics" in payload:
+        diagnostics = payload["failure_diagnostics"]
+        if not isinstance(diagnostics, list) or not diagnostics or len(diagnostics) > MAX_STEPS:
+            raise AgentRequestError(f"failure_diagnostics must contain between 1 and {MAX_STEPS} actions")
+        diagnostic_task = parse_task({
+            "task_id": f"{payload['task_id']}-diagnostics",
+            "goal": "Read-only diagnostics for a failed task",
+            "actions": diagnostics,
+        })
+        diagnostic_tools = {
+            "inspect_directory", "read_text", "file_fingerprint", "inspect_backup",
+            "recovery_preflight", "git_status", "compile_python", "run_tests", "verify_text",
+        }
+        for index, action in enumerate(diagnostic_task["actions"]):
+            if action["tool"] not in diagnostic_tools:
+                raise AgentRequestError(
+                    f"failure_diagnostics[{index}] tool must be read-only; writes and restore actions are forbidden"
+                )
+        normalized_task["failure_diagnostics"] = diagnostic_task["actions"]
     return normalized_task
 
 
@@ -495,6 +514,9 @@ def run_task(payload: Any, workspace: str | Path, ledger_path: str | Path) -> di
     # Validate all declared goal paths before acquiring the lock or running any action.
     for criterion in task.get("success_criteria", []):
         _inside(root, criterion["path"])
+    for diagnostic in task.get("failure_diagnostics", []):
+        if "path" in diagnostic and diagnostic["tool"] not in {"inspect_backup"}:
+            _inside(root, diagnostic["path"])
     ledger = Path(ledger_path).resolve()
     ledger.parent.mkdir(parents=True, exist_ok=True)
     lock_path = ledger.with_name(ledger.name + ".lock")
@@ -552,7 +574,35 @@ def _run_task_locked(task: dict, root: Path, ledger: Path) -> dict:
         _append_event(ledger, {"event": "STEP_OBSERVED", "task_id": task["task_id"], **step, "timestamp": datetime.now(timezone.utc).isoformat()})
         if step["status"] != "SUCCEEDED":
             result["status"] = "STOPPED"
-            result["recovery"] = "Fail-closed: stopped after the first failed step; no automatic retry or unapproved corrective action was attempted."
+            result["recovery"] = (
+                "Fail-closed: stopped after the first failed step. "
+                "Any configured failure_diagnostics are read-only evidence gathering only; "
+                "no automatic retry, rollback, or corrective write is attempted."
+            )
+            diagnostics = task.get("failure_diagnostics", [])
+            if diagnostics:
+                result["failure_diagnostics"] = []
+                for diagnostic in diagnostics:
+                    diagnostic_result = {
+                        "step_id": diagnostic["step_id"],
+                        "tool": diagnostic["tool"],
+                    }
+                    try:
+                        observation = execute_action(diagnostic, root, backup_root)
+                        diagnostic_result["observation"] = observation
+                        diagnostic_result["status"] = (
+                            "SUCCEEDED" if observation.get("ok", True) else "FAILED"
+                        )
+                    except (AgentRequestError, OSError, UnicodeError) as exc:
+                        diagnostic_result["status"] = "FAILED"
+                        diagnostic_result["observation"] = {"ok": False, "error": str(exc)}
+                    result["failure_diagnostics"].append(diagnostic_result)
+                    _append_event(ledger, {
+                        "event": "FAILURE_DIAGNOSTIC_OBSERVED",
+                        "task_id": task["task_id"],
+                        **diagnostic_result,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    })
             break
     else:
         criteria = task.get("success_criteria", [])
