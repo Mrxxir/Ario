@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from ario_agent import AgentRequestError, _append_event, _inside, parse_task, run_task
+from ario_agent import AgentRequestError, _append_event, _ensure_task_id_unused, _inside, parse_task, run_task
 
 
 MAX_WORKFLOW_STAGES = 8
@@ -149,6 +149,9 @@ def run_workflow(payload: Any, workspace: str | Path, ledger_path: str | Path) -
             os.close(lock_fd)
 
         _ensure_workflow_id_unused(ledger, workflow["workflow_id"])
+        # Refuse a partially executed workflow if any declared task ID was already used.
+        for stage in workflow["stages"]:
+            _ensure_task_id_unused(ledger, stage["task"]["task_id"])
         result = {
             "workflow_id": workflow["workflow_id"],
             "goal": workflow["goal"],
