@@ -155,8 +155,10 @@ def request_plan(
     workspace: str | Path,
     model: str = DEFAULT_MODEL,
     ollama_url: str = DEFAULT_OLLAMA_URL,
-    timeout: int = 120,
+    timeout: int = 300,
 ) -> dict:
+    if isinstance(timeout, bool) or not isinstance(timeout, int) or timeout < 1 or timeout > 1800:
+        raise AgentRequestError("timeout must be an integer between 1 and 1800 seconds")
     if not isinstance(goal, str) or not goal.strip() or len(goal) > MAX_GOAL_CHARS:
         raise AgentRequestError(f"goal must contain between 1 and {MAX_GOAL_CHARS} characters")
     if not isinstance(model, str) or not model.strip() or len(model) > 200:
@@ -228,11 +230,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--ledger", required=True, help="Append-only JSONL execution ledger")
     parser.add_argument("--model", default=DEFAULT_MODEL, help="Local Ollama model name")
     parser.add_argument("--ollama-url", default=DEFAULT_OLLAMA_URL, help="Local Ollama base URL")
+    parser.add_argument("--timeout", type=int, default=300, help="Ollama response timeout in seconds (1-1800; default 300)")
     parser.add_argument("--execute", action="store_true", help="Execute the validated plan; default is plan-only")
     args = parser.parse_args(argv)
     try:
         root = Path(args.workspace).resolve()
-        workflow = request_plan(args.goal, root, args.model, args.ollama_url)
+        workflow = request_plan(args.goal, root, args.model, args.ollama_url, args.timeout)
         result: dict[str, Any] = {
             "status": "PLAN_READY",
             "execution_requested": args.execute,
