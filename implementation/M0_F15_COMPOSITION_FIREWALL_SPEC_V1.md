@@ -84,7 +84,7 @@ Other semantics—including `SAME_ENTITY`, `CONSCIOUSNESS`, confidence, ranking,
 
 ## 6. Normative invariants
 
-**F15-I1 — No local-to-global truth escalation.** Under declared `M0-F15-1.0`, a request with `requested_output_semantics = CLAIM_TRUTH` is rejected as `COMPOSITION_FORBIDDEN`, regardless of whether the input local verdicts are all `PASS`, mixed, or contain `FAIL`.
+**F15-I1 — No local-to-global truth escalation.** When `M0-F15-1.0` is declared, a request with `requested_output_semantics = CLAIM_TRUTH` is rejected as `COMPOSITION_FORBIDDEN`, regardless of whether the input local verdicts are all `PASS`, mixed, or contain `FAIL`, and regardless of any caller-supplied composition rule ID. An unsupported rule ID cannot authorize truth; the direct truth-escalation request remains forbidden.
 
 **F15-I2 — No self-authorization.** A request cannot authorize its own truth mapping merely by supplying a rule ID, rule version, rationale, or declaration that the rule is admissible. The v1 implementation has no allowlist entry that authorizes local verdicts to establish global Claim truth.
 
@@ -110,17 +110,17 @@ The F15 result must preserve the distinction between the firewall's local struct
 
 | Case | Input condition | Required result |
 |---|---|---|
-| F15-A | Five distinct supplied `AuditResult` objects each have local verdict `PASS`; requested output is `CLAIM_TRUTH` | `COMPOSITION_FORBIDDEN` |
+| F15-A | One declared input binding for each of `IRG-01` through `IRG-05`, each carrying a distinct supplied `AuditResult` with local verdict `PASS`; scope is `ALL_FIVE_IRGS`; requested output is `CLAIM_TRUTH` | `COMPOSITION_FORBIDDEN` |
 | F15-B | Five supplied results include mixed `PASS`/`FAIL`; requested output is `CLAIM_TRUTH` | `COMPOSITION_FORBIDDEN`; verdict polarity must not authorize truth |
 | F15-C | Five supplied local `PASS` results request `LOCAL_RESULT_SUMMARY` under the supported bounded rule | May be structurally accepted; no Claim-truth status is emitted |
 | F15-D | Requested output semantic is unrecognized, renamed, or unsupported | `UNKNOWN`, not an implicit summary or `PASS` |
-| F15-E | Composition rule ID/version is unsupported or F15 is not declared in the audit invocation's `rule_versions` | `UNKNOWN`, not a positive composition result |
+| F15-E | A bounded-summary request uses an unsupported composition rule ID/version, or F15 is not declared in the audit invocation's `rule_versions` | `UNKNOWN`, not a positive composition result. If F15 is declared and the requested output is `CLAIM_TRUTH`, F15-A's `COMPOSITION_FORBIDDEN` rule takes precedence. |
 | F15-F | Duplicate input `audit_id` values | `UNKNOWN`; do not count duplicate references as distinct local results |
 | F15-G | `composition_id` equals an input `audit_id` | `UNKNOWN` or explicit self-validation-cycle rejection; never authorize itself |
 | F15-H | Only a subset of local results is supplied but `requested_input_scope = ALL_FIVE_IRGS` | `UNKNOWN` or scope-mismatch rejection; no silent completeness inference |
-| F15-K | A bounded summary uses an unsupported composition rule ID/version | `UNKNOWN`; explicit versioning alone does not self-authorize a rule |
 | F15-I | A result is separately recorded but not used as a truth mapping | Recording alone is not a composition violation and must not establish truth |
 | F15-J | A bounded summary's result is referenced later as assessment evidence | Reject as inadmissible/wrong-kind; summary result is not evidence |
+| F15-K | A bounded summary uses an unsupported composition rule ID/version | `UNKNOWN`; explicit versioning alone does not self-authorize a rule |
 
 The pre-registered F15-A case is mandatory. Additional cases strengthen the contract without altering its expected outcome.
 
