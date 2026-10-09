@@ -27,6 +27,42 @@ class BoundedAgentTests(unittest.TestCase):
             self.assertEqual(result["status"], "STOPPED")
             self.assertIn("workspace", result["steps"][0]["observation"]["error"])
 
+    def test_duplicate_task_id_is_rejected_before_actions_or_ledger_append(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "notes.txt"
+            target.write_text("unchanged", encoding="utf-8")
+            ledger = root / "audit.jsonl"
+            task = self.task([{"step_id": "s1", "tool": "read_text", "path": "notes.txt"}])
+
+            first = run_task(task, root, ledger)
+            self.assertEqual(first["status"], "COMPLETED")
+            ledger_before = ledger.read_bytes()
+            target_before = target.read_bytes()
+
+            with self.assertRaisesRegex(AgentRequestError, "already exists.*duplicate execution"):
+                run_task(task, root, ledger)
+
+            self.assertEqual(ledger.read_bytes(), ledger_before)
+            self.assertEqual(target.read_bytes(), target_before)
+
+    def test_malformed_existing_ledger_blocks_task_before_any_write(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "notes.txt"
+            target.write_text("unchanged", encoding="utf-8")
+            ledger = root / "audit.jsonl"
+            ledger.write_text('{"event":"TASK_STARTED"}\nnot-json\n', encoding="utf-8")
+            ledger_before = ledger.read_bytes()
+            target_before = target.read_bytes()
+            task = self.task([{"step_id": "s1", "tool": "read_text", "path": "notes.txt"}])
+
+            with self.assertRaisesRegex(AgentRequestError, "malformed at line 2"):
+                run_task(task, root, ledger)
+
+            self.assertEqual(ledger.read_bytes(), ledger_before)
+            self.assertEqual(target.read_bytes(), target_before)
+
     def test_successful_steps_are_observed_and_ledger_is_append_only(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

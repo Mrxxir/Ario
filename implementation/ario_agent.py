@@ -429,12 +429,40 @@ def _append_event(ledger: Path, event: dict) -> None:
         stream.write(json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n")
 
 
+def _ensure_task_id_unused(ledger: Path, task_id: str) -> None:
+    """Refuse duplicate task IDs before any task action or ledger append."""
+    if not ledger.exists():
+        return
+    try:
+        lines = ledger.read_text(encoding="utf-8-sig").splitlines()
+    except OSError as exc:
+        raise AgentRequestError(f"cannot inspect existing ledger before execution: {exc}") from exc
+    for line_number, line in enumerate(lines, start=1):
+        if not line.strip():
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise AgentRequestError(
+                f"existing ledger is malformed at line {line_number}; refusing to start a task"
+            ) from exc
+        if not isinstance(event, dict):
+            raise AgentRequestError(
+                f"existing ledger has an invalid event at line {line_number}; refusing to start a task"
+            )
+        if event.get("task_id") == task_id:
+            raise AgentRequestError(
+                f"task_id {task_id!r} already exists in the ledger; refusing duplicate execution"
+            )
+
+
 def run_task(payload: Any, workspace: str | Path, ledger_path: str | Path) -> dict:
     task = parse_task(payload)
     root = Path(workspace).resolve()
     if not root.is_dir():
         raise AgentRequestError("workspace must be an existing directory")
     ledger = Path(ledger_path).resolve()
+    _ensure_task_id_unused(ledger, task["task_id"])
     backup_root = ledger.parent / "backups"
     started = datetime.now(timezone.utc).isoformat()
     result = {
