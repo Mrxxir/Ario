@@ -1,3 +1,4 @@
+import hashlib
 import json
 import tempfile
 import unittest
@@ -42,6 +43,44 @@ class BoundedAgentTests(unittest.TestCase):
             records = [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
             self.assertTrue(records[0]["previous"])
             self.assertEqual(records[-1]["status"], "COMPLETED")
+
+    def test_replace_text_requires_hash_and_keeps_external_backup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "workspace"
+            root.mkdir()
+            target = root / "notes.txt"
+            target.write_text("before", encoding="utf-8")
+            digest = hashlib.sha256(b"before").hexdigest()
+            ledger = Path(directory) / "state" / "events.jsonl"
+            task = self.task([{
+                "step_id": "s1", "tool": "replace_text", "path": "notes.txt",
+                "content": "after", "expected_sha256": digest,
+            }])
+            result = run_task(task, root, ledger)
+            self.assertEqual(result["status"], "COMPLETED")
+            self.assertEqual(target.read_text(encoding="utf-8"), "after")
+            step = result["steps"][0]["observation"]
+            backup = Path(step["backup_path"])
+            self.assertTrue(backup.is_file())
+            self.assertEqual(backup.read_text(encoding="utf-8"), "before")
+            self.assertEqual(step["before_sha256"], digest)
+            self.assertTrue(step["verified"])
+            self.assertFalse(backup.is_relative_to(root))
+
+    def test_replace_text_hash_mismatch_leaves_target_untouched(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "workspace"
+            root.mkdir()
+            target = root / "notes.txt"
+            target.write_text("keep", encoding="utf-8")
+            task = self.task([{
+                "step_id": "s1", "tool": "replace_text", "path": "notes.txt",
+                "content": "replace", "expected_sha256": "0" * 64,
+            }])
+            result = run_task(task, root, Path(directory) / "state" / "events.jsonl")
+            self.assertEqual(result["status"], "STOPPED")
+            self.assertEqual(target.read_text(encoding="utf-8"), "keep")
+            self.assertIn("SHA-256 precondition failed", result["steps"][0]["observation"]["error"])
 
     def test_stops_after_first_failed_observation(self):
         with tempfile.TemporaryDirectory() as directory:
