@@ -311,12 +311,11 @@ class AuditEngine:
             if len(owners) < 2:
                 continue
 
-            for item in owners:
-                if all(
-                    item.independence_status == IndependenceStatus.INDEPENDENT
-                    for item in owners
-                ):
-                    violations.append("EVIDENCE_INFLATION")
+            if all(
+                item.independence_status == IndependenceStatus.INDEPENDENT
+                for item in owners
+            ):
+                violations.append("EVIDENCE_INFLATION")
 
         return violations
 

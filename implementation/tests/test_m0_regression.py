@@ -444,6 +444,7 @@ def test_f12_repeated_observation_causes_evidence_inflation():
     )
 
     assert "EVIDENCE_INFLATION" in r.violations
+    assert r.violations.count("EVIDENCE_INFLATION") == 1
 
 
 def test_f14_two_states_without_temporal_relation():
