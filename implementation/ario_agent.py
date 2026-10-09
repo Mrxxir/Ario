@@ -465,13 +465,91 @@ def run_task(payload: Any, workspace: str | Path, ledger_path: str | Path) -> di
     return result
 
 
+def inspect_task_history(task_id: str, ledger_path: str | Path) -> dict:
+    """Read-only crash-recovery assessment. Never resumes or replays task actions."""
+    if not isinstance(task_id, str) or not task_id.strip():
+        raise AgentRequestError("task_id must be a non-empty string")
+    ledger = Path(ledger_path)
+    try:
+        raw_lines = ledger.read_text(encoding="utf-8-sig").splitlines()
+    except OSError as exc:
+        return {"task_id": task_id, "status": "UNKNOWN", "error": str(exc),
+                "automatic_resume": False, "write_performed": False}
+    events = []
+    for line_number, line in enumerate(raw_lines, start=1):
+        if not line.strip():
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            return {"task_id": task_id, "status": "UNKNOWN",
+                    "error": f"malformed JSONL ledger at line {line_number}",
+                    "automatic_resume": False, "write_performed": False}
+        if not isinstance(event, dict) or not isinstance(event.get("event"), str):
+            return {"task_id": task_id, "status": "UNKNOWN",
+                    "error": f"invalid event shape at line {line_number}",
+                    "automatic_resume": False, "write_performed": False}
+        if event.get("task_id") == task_id:
+            events.append(event)
+    starts = [event for event in events if event["event"] == "TASK_STARTED"]
+    finishes = [event for event in events if event["event"] == "TASK_FINISHED"]
+    steps = [event for event in events if event["event"] == "STEP_OBSERVED"]
+    if len(starts) != 1 or len(finishes) > 1 or (finishes and not starts):
+        return {"task_id": task_id, "status": "UNKNOWN",
+                "error": "missing or ambiguous task lifecycle records",
+                "event_count": len(events), "automatic_resume": False, "write_performed": False}
+    if not starts:
+        return {"task_id": task_id, "status": "UNKNOWN",
+                "error": "task_id was not found in the ledger",
+                "event_count": 0, "automatic_resume": False, "write_performed": False}
+    if finishes:
+        final_status = finishes[0].get("status")
+        if final_status not in {"COMPLETED", "STOPPED"}:
+            return {"task_id": task_id, "status": "UNKNOWN",
+                    "error": "unrecognized terminal status in ledger",
+                    "event_count": len(events), "automatic_resume": False, "write_performed": False}
+        status = final_status
+        next_state = "NONE_TERMINAL_TASK"
+    else:
+        status = "INCOMPLETE"
+        next_state = "UNKNOWN"
+    return {
+        "task_id": task_id,
+        "status": status,
+        "goal": starts[0].get("goal"),
+        "event_count": len(events),
+        "observed_steps": [
+            {"step_id": event.get("step_id"), "tool": event.get("tool"),
+             "status": event.get("status"), "timestamp": event.get("timestamp")}
+            for event in steps
+        ],
+        "last_event": events[-1].get("event") if events else None,
+        "next_step_state": next_state,
+        "automatic_resume": False,
+        "write_performed": False,
+        "recovery_guidance": (
+            "Task has a terminal ledger record; inspect its result before planning any new task."
+            if finishes else
+            "Execution may have stopped between an action and its ledger observation. Inspect actual workspace and backup state before creating a new task; never replay the old task automatically."
+        ),
+    }
+
+
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description="Run a bounded, allowlisted Ario Windows workspace task.")
-    parser.add_argument("--task", required=True, help="Path to a declarative task JSON file")
-    parser.add_argument("--workspace", required=True, help="Existing workspace root")
+    parser = argparse.ArgumentParser(description="Run or inspect a bounded Ario workspace task.")
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--task", help="Path to a declarative task JSON file")
+    mode.add_argument("--inspect-task-id", help="Read-only recovery inspection for a task_id in the ledger")
+    parser.add_argument("--workspace", help="Existing workspace root (required with --task)")
     parser.add_argument("--ledger", required=True, help="Append-only JSONL audit ledger path")
     args = parser.parse_args(argv)
     try:
+        if args.inspect_task_id is not None:
+            result = inspect_task_history(args.inspect_task_id, args.ledger)
+            print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+            return 0 if result["status"] in {"COMPLETED", "STOPPED"} else 2
+        if not args.workspace:
+            parser.error("--workspace is required with --task")
         payload = json.loads(Path(args.task).read_text(encoding="utf-8-sig"))
         result = run_task(payload, args.workspace, args.ledger)
         print(json.dumps(result, ensure_ascii=False, sort_keys=True))
