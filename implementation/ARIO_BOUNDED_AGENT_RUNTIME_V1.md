@@ -78,6 +78,8 @@ There is no arbitrary shell, arbitrary command, network, delete-file, or privile
 
 ## Control and recovery
 
+- Read-only crash recovery inspection is available with `python .\\implementation\\ario_agent.py --inspect-task-id TASK-ID --ledger PATH`. It classifies a task with a terminal `TASK_FINISHED` event as `COMPLETED` or `STOPPED`; a started task without a terminal event is `INCOMPLETE`, with the next execution state explicitly `UNKNOWN`. Missing, malformed, or ambiguous lifecycle evidence returns `UNKNOWN`. It never resumes, retries, restores, or writes. Before starting a new task after an interruption, compare the ledger with actual workspace and backup evidence; an operation may have occurred before its observation was appended.
+
 - The full task schema and allowlist are validated before execution.
 - Each step produces an observation recorded to the JSONL ledger.
 - A failed step stops the task; no automatic retry or corrective write is attempted.
