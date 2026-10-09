@@ -52,7 +52,7 @@ class BoundedAgentTests(unittest.TestCase):
             target = root / "notes.txt"
             target.write_text("unchanged", encoding="utf-8")
             ledger = root / "audit.jsonl"
-            ledger.write_text('{"event":"TASK_STARTED"}\\nnot-json\\n', encoding="utf-8")
+            ledger.write_text('{"event":"TASK_STARTED"}\nnot-json\n', encoding="utf-8")
             ledger_before = ledger.read_bytes()
             target_before = target.read_bytes()
             task = self.task([{"step_id": "s1", "tool": "read_text", "path": "notes.txt"}])
