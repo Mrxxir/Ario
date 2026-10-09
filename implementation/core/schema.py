@@ -121,6 +121,53 @@ class IndependenceStatus(str, Enum):
     UNKNOWN = "UNKNOWN"
 
 
+class CompositionConclusion(str, Enum):
+    BOUNDED_SUMMARY = "BOUNDED_SUMMARY"
+    GLOBAL_TRUTH = "GLOBAL_TRUTH"
+    CLAIM_TRUTH = "CLAIM_TRUTH"
+    SAME_ENTITY = "SAME_ENTITY"
+    ONTOLOGICAL_IDENTITY = "ONTOLOGICAL_IDENTITY"
+    CONSCIOUSNESS = "CONSCIOUSNESS"
+
+
+@dataclass(frozen=True)
+class CompositionParticipantResult:
+    irg_id: str
+    audit_id: str
+
+    def __post_init__(self) -> None:
+        if not self.irg_id or not self.irg_id.strip():
+            raise ValueError("irg_id must be non-empty")
+        if not self.audit_id or not self.audit_id.strip():
+            raise ValueError("audit_id must be non-empty")
+
+
+@dataclass(frozen=True)
+class CompositionRequest:
+    composition_id: str
+    participant_results: tuple[CompositionParticipantResult, ...]
+    composition_rule_id: str
+    composition_rule_version: str
+    temporal_context: str
+    requested_conclusion: CompositionConclusion
+    limitations: str
+    scope: str
+
+    def __post_init__(self) -> None:
+        for name in (
+            "composition_id", "composition_rule_id",
+            "composition_rule_version", "temporal_context",
+            "limitations", "scope",
+        ):
+            value = getattr(self, name)
+            if not value or not value.strip():
+                raise ValueError(f"{name} must be non-empty")
+        if not self.participant_results:
+            raise ValueError("participant_results must be non-empty")
+        if not isinstance(self.requested_conclusion, CompositionConclusion):
+            raise ValueError("requested_conclusion must be typed")
+
+
 @dataclass(frozen=True)
 class Claim:
     claim_id: str

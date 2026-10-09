@@ -1005,3 +1005,80 @@ def test_f11_ambiguous_duplicate_evidence_ids_remain_unknown():
 
     assert "UNKNOWN" in r.violations
     assert r.verdict == "FAIL"
+# F15: cross-IRG composition firewall regression coverage.
+
+def _f15_fixture(conclusion):
+    from core.schema import (
+        AuditResult, CompositionParticipantResult, CompositionRequest,
+    )
+
+    results = tuple(
+        AuditResult(
+            audit_id=f"F15-AUDIT-{i}",
+            inspector_id="F15-TEST-INSPECTOR",
+            inspector_version="1",
+            execution_timestamp=TS,
+            configuration_id="F15-TEST",
+            rule_versions=("M0-F15-1.0",),
+            artifacts_examined=(),
+            violations=(),
+            verdict="PASS",
+            verdict_basis="Local structural fixture only",
+        )
+        for i in range(1, 6)
+    )
+    request = CompositionRequest(
+        composition_id="F15-COMPOSITION",
+        participant_results=tuple(
+            CompositionParticipantResult(f"IRG-{i}", f"F15-AUDIT-{i}")
+            for i in range(1, 6)
+        ),
+        composition_rule_id="M0-F15",
+        composition_rule_version="M0-F15-1.0",
+        temporal_context="F15-TEST-SNAPSHOT",
+        requested_conclusion=conclusion,
+        limitations="Local structure does not establish truth or ontology",
+        scope="F15 regression fixture",
+    )
+    return results, request
+
+
+def test_f15_forbids_global_truth_from_five_local_results():
+    from core.schema import CompositionConclusion
+
+    results, request = _f15_fixture(CompositionConclusion.GLOBAL_TRUTH)
+    r = run(
+        "F15-GLOBAL-TRUTH",
+        AuditInput(prior_audit_results=results, composition_requests=(request,)),
+        rule_versions=("M0-1.0", "M0-F15-1.0"),
+    )
+    assert r.verdict == "FAIL"
+    assert "COMPOSITION_FORBIDDEN" in r.violations
+
+
+def test_f15_allows_bounded_summary():
+    from core.schema import CompositionConclusion
+
+    results, request = _f15_fixture(CompositionConclusion.BOUNDED_SUMMARY)
+    r = run(
+        "F15-BOUNDED-SUMMARY",
+        AuditInput(prior_audit_results=results, composition_requests=(request,)),
+        rule_versions=("M0-1.0", "M0-F15-1.0"),
+    )
+    assert r.verdict == "PASS"
+    assert "COMPOSITION_FORBIDDEN" not in r.violations
+
+
+def test_f15_missing_participant_result_is_unknown():
+    from dataclasses import replace
+    from core.schema import CompositionConclusion
+
+    results, request = _f15_fixture(CompositionConclusion.BOUNDED_SUMMARY)
+    request = replace(request, participant_results=request.participant_results[:-1])
+    r = run(
+        "F15-MISSING-PARTICIPANT",
+        AuditInput(prior_audit_results=results, composition_requests=(request,)),
+        rule_versions=("M0-1.0", "M0-F15-1.0"),
+    )
+    assert r.verdict == "FAIL"
+    assert "UNKNOWN" in r.violations
