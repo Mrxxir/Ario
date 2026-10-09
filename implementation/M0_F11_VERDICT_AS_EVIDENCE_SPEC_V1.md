@@ -2,7 +2,7 @@
 
 ## Status
 
-**IMPLEMENTED ON PR BRANCH; PRIOR REGRESSION RUN PASSED; REVIEW AMENDMENTS AWAITING THEIR OWN CI RUN; F11 NOT ACCEPTED**
+**IMPLEMENTED ON PR BRANCH; REVIEW AMENDMENTS TESTED; F11 ACCEPTANCE STILL BOUNDED TO THE DECLARED M0 CONTRACT**
 
 Pre-registration source: `implementation/M0_PRE_REGISTRATION_V1.md`, fixture F11.
 Reviewed baseline: `23d45feb3efcada7cc821e6202ae8a9a5613ecfc`.
@@ -10,13 +10,13 @@ This document does not modify or reinterpret the frozen pre-registration.
 
 ### Recorded runtime validation
 
-- Workflow: `Implementation Regression` (GitHub Actions run `37916983150`)
-- Environment: GitHub-hosted Ubuntu 24.04; CPython 3.13.16; pytest 9.1.1
+- Latest workflow: `Implementation Regression` (GitHub Actions run `37917807274`)
+- Environment: GitHub-hosted Ubuntu 24.04.5; CPython 3.13.16
 - Command: `python -m pytest -q tests/test_m0_regression.py`
-- Result: **42 passed in 0.09s**
-- Tested pull-request merge ref: `ad12d0723d0e5f4e5f5e473aa9644f4b6e9ba66c`, combining PR head `e7972d548ffaf5e03e99047992cdcfedf9851f55` with base `23d45feb3efcada7cc821e6202ae8a9a5613ecfc`.
-- Scope limitation: this confirms the named regression file passed on that tested merge ref. It is not proof of all possible adversarial coverage, nor an ontology/truth claim. The later review amendments below have not yet been validated by their own workflow run.
-- Review amendment commits: `00b83c54366ea66cf0db500c4c408ffd4e1b3d05` and `8039a3c96e284fb878bfe6a6433949b67a4a0f87`; fresh CI result pending.
+- Result: **45 passed in 0.07s**
+- Tested pull-request merge ref: `40adefd8eb4f70fb7d8e263928c2ffbf5c5cf30e`, with PR head `84a0fee68550d52fc2857bf48f82a245f448af63` and base `23d45feb3efcada7cc821e6202ae8a9a5613ecfc`.
+- Scope limitation: this confirms the named regression file passed on that tested merge ref. It is not proof of all possible adversarial coverage, nor an ontology/truth claim. Any subsequent code change requires its own workflow result.
+- Review amendments include explicit F11 rule-version gating, conservative handling of cross-kind and duplicate result-ID ambiguity, and `UNKNOWN` when prior audit results are the only supplied input.
 
 ## 1. Threat model
 
@@ -91,4 +91,4 @@ Do not modify `M0_PRE_REGISTRATION_V1.md` or overwrite an earlier capability rec
 
 F11 is accepted only when adversarial cases reject verdict laundering, false-positive controls preserve legitimate evidence, and the complete regression suite passes in a reproducible recorded run. Source presence, a design document, or unexecuted test definitions are not acceptance evidence.
 
-**Current classification: PRIOR REGRESSION RUN PASSED / REVIEW AMENDMENTS AWAITING CI / FINAL CODE REVIEW PENDING / NOT ACCEPTED.**
+**Current classification: REVIEW AMENDMENTS PASSED THE DECLARED M0 REGRESSION SUITE / F11 DEFENSE IS BOUNDED TO THE SUPPLIED TYPED INPUTS AND IMPLEMENTED RULES / NO CLAIM OF GENERAL OR ONTOLOGICAL PROOF.**
