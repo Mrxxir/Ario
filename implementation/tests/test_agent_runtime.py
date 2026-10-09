@@ -27,6 +27,38 @@ class BoundedAgentTests(unittest.TestCase):
             self.assertEqual(result["status"], "STOPPED")
             self.assertIn("workspace", result["steps"][0]["observation"]["error"])
 
+    def test_existing_execution_lock_blocks_task_without_modifying_target_or_ledger(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "notes.txt"
+            target.write_text("unchanged", encoding="utf-8")
+            ledger = root / "audit.jsonl"
+            lock = root / "audit.jsonl.lock"
+            lock.write_text('{"pid": 123, "task_id": "OTHER-TASK"}', encoding="utf-8")
+            target_before = target.read_bytes()
+            lock_before = lock.read_bytes()
+            task = self.task([{"step_id": "s1", "tool": "replace_text", "path": "notes.txt",
+                               "expected_sha256": hashlib.sha256(target_before).hexdigest(),
+                               "content": "must not be written"}])
+
+            with self.assertRaisesRegex(AgentRequestError, "task execution lock already exists"):
+                run_task(task, root, ledger)
+
+            self.assertEqual(target.read_bytes(), target_before)
+            self.assertFalse(ledger.exists())
+            self.assertEqual(lock.read_bytes(), lock_before)
+
+    def test_execution_lock_is_removed_after_task_finishes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "notes.txt").write_text("unchanged", encoding="utf-8")
+            ledger = root / "audit.jsonl"
+
+            result = run_task(self.task([{"step_id": "s1", "tool": "read_text", "path": "notes.txt"}]), root, ledger)
+
+            self.assertEqual(result["status"], "COMPLETED")
+            self.assertFalse((root / "audit.jsonl.lock").exists())
+
     def test_duplicate_task_id_is_rejected_before_actions_or_ledger_append(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

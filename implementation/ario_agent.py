@@ -462,6 +462,34 @@ def run_task(payload: Any, workspace: str | Path, ledger_path: str | Path) -> di
     if not root.is_dir():
         raise AgentRequestError("workspace must be an existing directory")
     ledger = Path(ledger_path).resolve()
+    ledger.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = ledger.with_name(ledger.name + ".lock")
+    try:
+        lock_fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    except FileExistsError as exc:
+        raise AgentRequestError(
+            f"task execution lock already exists at {lock_path}; another task may be running "
+            "or a previous process may have stopped unexpectedly; inspect before removing it"
+        ) from exc
+    try:
+        try:
+            lock_record = json.dumps({
+                "pid": os.getpid(),
+                "task_id": task["task_id"],
+                "started_at": datetime.now(timezone.utc).isoformat(),
+            }).encode("utf-8")
+            os.write(lock_fd, lock_record)
+        finally:
+            os.close(lock_fd)
+        return _run_task_locked(task, root, ledger)
+    finally:
+        try:
+            lock_path.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def _run_task_locked(task: dict, root: Path, ledger: Path) -> dict:
     _ensure_task_id_unused(ledger, task["task_id"])
     backup_root = ledger.parent / "backups"
     started = datetime.now(timezone.utc).isoformat()
