@@ -3,7 +3,7 @@ import json
 import socket
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -321,6 +321,29 @@ class LocalOllamaPlannerTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(json.loads(output.getvalue())["status"], "COMPLETED")
         run_workflow_mock.assert_called_once()
+
+
+    @patch("ario_planner.run_workflow")
+    @patch("ario_planner.request_plan")
+    def test_cli_never_executes_when_plan_validation_fails(self, request_plan_mock, run_workflow_mock):
+        request_plan_mock.side_effect = AgentRequestError(
+            "Ollama recommendation remained invalid after one correction attempt"
+        )
+        argv = [
+            "ario_planner.py", "--goal", "inspect", "--workspace", ".",
+            "--ledger", "events.jsonl", "--execute",
+        ]
+        with patch("sys.argv", argv):
+            with redirect_stdout(io.StringIO()) as stdout, redirect_stderr(io.StringIO()) as stderr:
+                code = ario_planner.main()
+
+        self.assertEqual(code, 2)
+        self.assertEqual(stdout.getvalue(), "")
+        error = json.loads(stderr.getvalue())
+        self.assertEqual(error["status"], "UNKNOWN")
+        self.assertIn("remained invalid", error["error"])
+        run_workflow_mock.assert_not_called()
+        request_plan_mock.assert_called_once()
 
 
 if __name__ == "__main__":
