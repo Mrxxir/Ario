@@ -67,6 +67,14 @@ class LocalOllamaPlannerTests(unittest.TestCase):
             self.assertEqual(sent["model"], "qwen2.5:7b")
             self.assertEqual(sent["format"], "json")
             self.assertFalse(sent["stream"])
+            self.assertEqual(urlopen.call_args.kwargs["timeout"], 300)
+
+    def test_timeout_must_be_within_supported_bounds(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for timeout in (0, -1, 1801, True, "300"):
+                with self.subTest(timeout=timeout):
+                    with self.assertRaisesRegex(AgentRequestError, "timeout must be an integer"):
+                        request_plan("Inspect repository", directory, timeout=timeout)
 
     @patch("ario_planner.urllib.request.urlopen")
     def test_invalid_workflow_is_rejected_before_execution(self, urlopen):
