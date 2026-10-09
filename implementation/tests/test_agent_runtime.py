@@ -437,5 +437,94 @@ class BoundedAgentTests(unittest.TestCase):
             self.assertIn("Fail-closed", result["recovery"])
 
 
+
+    def test_goal_contract_is_independently_verified_after_actions(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "result.txt"
+            target.write_text("expected", encoding="utf-8")
+            ledger = root / "audit.jsonl"
+            task = {
+                **self.task([{"step_id": "inspect", "tool": "read_text", "path": "result.txt"}]),
+                "success_criteria": [{
+                    "criterion_id": "result-is-expected",
+                    "path": "result.txt",
+                    "expected_text": "expected",
+                }],
+            }
+
+            result = run_task(task, root, ledger)
+
+            self.assertEqual(result["status"], "COMPLETED")
+            self.assertEqual(result["goal_verification"][0]["status"], "PASSED")
+            self.assertTrue(result["goal_verification"][0]["observation"]["matches"])
+            events = [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
+            criterion_event = next(event for event in events if event["event"] == "GOAL_CRITERION_OBSERVED")
+            self.assertEqual(criterion_event["criterion_id"], "result-is-expected")
+            self.assertEqual(events[-1]["status"], "COMPLETED")
+
+    def test_goal_contract_failure_stops_even_when_all_actions_succeed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "result.txt"
+            target.write_text("actual", encoding="utf-8")
+            task = {
+                **self.task([{"step_id": "inspect", "tool": "read_text", "path": "result.txt"}]),
+                "success_criteria": [{
+                    "criterion_id": "result-is-expected",
+                    "path": "result.txt",
+                    "expected_text": "expected",
+                }],
+            }
+
+            result = run_task(task, root, root / "audit.jsonl")
+
+            self.assertEqual(result["status"], "STOPPED")
+            self.assertEqual(result["goal_verification"][0]["status"], "FAILED")
+            self.assertFalse(result["goal_verification"][0]["observation"]["matches"])
+            self.assertIn("independent goal verification failed", result["recovery"])
+            self.assertEqual(target.read_text(encoding="utf-8"), "actual")
+
+    def test_invalid_goal_contract_is_rejected_before_any_action(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "result.txt"
+            target.write_text("unchanged", encoding="utf-8")
+            ledger = root / "audit.jsonl"
+            task = {
+                **self.task([{
+                    "step_id": "replace", "tool": "replace_text", "path": "result.txt",
+                    "content": "changed", "expected_sha256": hashlib.sha256(b"unchanged").hexdigest(),
+                }]),
+                "success_criteria": [{
+                    "criterion_id": "bad", "path": "../outside.txt", "expected_text": "x",
+                }],
+            }
+
+            with self.assertRaisesRegex(AgentRequestError, "escapes the configured workspace"):
+                run_task(task, root, ledger)
+
+            self.assertEqual(target.read_text(encoding="utf-8"), "unchanged")
+            self.assertFalse(ledger.exists())
+
+    def test_goal_contract_rejects_duplicate_or_unknown_criterion_fields(self):
+        base = {
+            **self.task([{"step_id": "inspect", "tool": "git_status"}]),
+            "success_criteria": [
+                {"criterion_id": "same", "path": "result.txt", "expected_text": "x"},
+                {"criterion_id": "same", "path": "result.txt", "expected_text": "x"},
+            ],
+        }
+        with self.assertRaisesRegex(AgentRequestError, "unique and non-empty"):
+            parse_task(base)
+        malformed = {
+            **self.task([{"step_id": "inspect", "tool": "git_status"}]),
+            "success_criteria": [{
+                "criterion_id": "c1", "path": "result.txt", "expected_text": "x", "shell": "no",
+            }],
+        }
+        with self.assertRaisesRegex(AgentRequestError, "exactly criterion_id"):
+            parse_task(malformed)
+
 if __name__ == "__main__":
     unittest.main()

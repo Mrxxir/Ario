@@ -49,8 +49,12 @@ def _inside(root: Path, relative: str) -> Path:
 def parse_task(payload: Any) -> dict:
     if not isinstance(payload, dict):
         raise AgentRequestError("task must be a JSON object")
-    if set(payload) != {"task_id", "goal", "actions"}:
-        raise AgentRequestError("task must contain exactly task_id, goal, and actions")
+    required_fields = {"task_id", "goal", "actions"}
+    allowed_fields = required_fields | {"success_criteria"}
+    if not required_fields <= set(payload) or set(payload) - allowed_fields:
+        raise AgentRequestError(
+            "task must contain exactly task_id, goal, actions, and optional success_criteria"
+        )
     if not isinstance(payload["task_id"], str) or not payload["task_id"].strip():
         raise AgentRequestError("task_id must be a non-empty string")
     if not isinstance(payload["goal"], str) or not payload["goal"].strip():
@@ -109,7 +113,34 @@ def parse_task(payload: Any) -> dict:
             if field in action:
                 normalized_action[field] = action[field]
         normalized.append(normalized_action)
-    return {"task_id": payload["task_id"], "goal": payload["goal"], "actions": normalized}
+
+    normalized_task = {"task_id": payload["task_id"], "goal": payload["goal"], "actions": normalized}
+    if "success_criteria" in payload:
+        criteria = payload["success_criteria"]
+        if not isinstance(criteria, list) or not criteria or len(criteria) > MAX_STEPS:
+            raise AgentRequestError(f"success_criteria must contain between 1 and {MAX_STEPS} criteria")
+        criterion_ids: set[str] = set()
+        normalized_criteria = []
+        for index, criterion in enumerate(criteria):
+            if not isinstance(criterion, dict) or set(criterion) != {"criterion_id", "path", "expected_text"}:
+                raise AgentRequestError(
+                    f"success_criteria[{index}] must contain exactly criterion_id, path, and expected_text"
+                )
+            criterion_id = criterion["criterion_id"]
+            if not isinstance(criterion_id, str) or not criterion_id.strip() or criterion_id in criterion_ids:
+                raise AgentRequestError(f"success_criteria[{index}].criterion_id must be unique and non-empty")
+            if not isinstance(criterion["path"], str) or not criterion["path"].strip():
+                raise AgentRequestError(f"success_criteria[{index}].path must be a relative path")
+            if not isinstance(criterion["expected_text"], str):
+                raise AgentRequestError(f"success_criteria[{index}].expected_text must be a string")
+            criterion_ids.add(criterion_id)
+            normalized_criteria.append({
+                "criterion_id": criterion_id,
+                "path": criterion["path"],
+                "expected_text": criterion["expected_text"],
+            })
+        normalized_task["success_criteria"] = normalized_criteria
+    return normalized_task
 
 
 def _run(command: list[str], cwd: Path, timeout: int = 90) -> dict:
@@ -461,6 +492,9 @@ def run_task(payload: Any, workspace: str | Path, ledger_path: str | Path) -> di
     root = Path(workspace).resolve()
     if not root.is_dir():
         raise AgentRequestError("workspace must be an existing directory")
+    # Validate all declared goal paths before acquiring the lock or running any action.
+    for criterion in task.get("success_criteria", []):
+        _inside(root, criterion["path"])
     ledger = Path(ledger_path).resolve()
     ledger.parent.mkdir(parents=True, exist_ok=True)
     lock_path = ledger.with_name(ledger.name + ".lock")
@@ -496,7 +530,13 @@ def _run_task_locked(task: dict, root: Path, ledger: Path) -> dict:
     result = {
         "task_id": task["task_id"], "goal": task["goal"], "status": "RUNNING",
         "started_at": started, "steps": [],
-        "completion_basis": "Completion means all declared allowlisted steps returned success; it does not establish that the goal is semantically achieved.",
+        "completion_basis": (
+            "Completion requires every declared action and every independently re-read success criterion to pass; "
+            "this does not prove semantic properties not represented by those criteria."
+            if task.get("success_criteria") else
+            "Completion means all declared allowlisted steps returned success; without success_criteria, "
+            "the natural-language goal has no independent final acceptance check."
+        ),
     }
     _append_event(ledger, {"event": "TASK_STARTED", "task_id": task["task_id"], "goal": task["goal"], "timestamp": started})
     for action in task["actions"]:
@@ -515,7 +555,42 @@ def _run_task_locked(task: dict, root: Path, ledger: Path) -> dict:
             result["recovery"] = "Fail-closed: stopped after the first failed step; no automatic retry or unapproved corrective action was attempted."
             break
     else:
-        result["status"] = "COMPLETED"
+        criteria = task.get("success_criteria", [])
+        if criteria:
+            result["goal_verification"] = []
+            for criterion in criteria:
+                try:
+                    observation = execute_action({
+                        "tool": "verify_text",
+                        "path": criterion["path"],
+                        "expected_text": criterion["expected_text"],
+                    }, root, backup_root)
+                except (AgentRequestError, OSError, UnicodeError) as exc:
+                    observation = {"ok": False, "error": str(exc)}
+                criterion_result = {
+                    "criterion_id": criterion["criterion_id"],
+                    "path": criterion["path"],
+                    "status": "PASSED" if observation.get("ok", False) else "FAILED",
+                    "observation": observation,
+                }
+                result["goal_verification"].append(criterion_result)
+                _append_event(ledger, {
+                    "event": "GOAL_CRITERION_OBSERVED",
+                    "task_id": task["task_id"],
+                    **criterion_result,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                })
+                if criterion_result["status"] != "PASSED":
+                    result["status"] = "STOPPED"
+                    result["recovery"] = (
+                        "Declared actions returned success, but independent goal verification failed. "
+                        "No automatic retry, rollback, or corrective write was attempted."
+                    )
+                    break
+            else:
+                result["status"] = "COMPLETED"
+        else:
+            result["status"] = "COMPLETED"
     result["finished_at"] = datetime.now(timezone.utc).isoformat()
     _append_event(ledger, {"event": "TASK_FINISHED", "task_id": task["task_id"], "status": result["status"], "timestamp": result["finished_at"]})
     return result

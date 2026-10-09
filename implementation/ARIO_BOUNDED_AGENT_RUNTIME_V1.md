@@ -99,3 +99,28 @@ There is no arbitrary shell, arbitrary command, network, delete-file, or privile
 - `COMPLETED` means all declared steps returned success. It does **not** prove the natural-language goal was semantically achieved.
 - The event ledger is an audit aid, not tamper-proof storage. A local administrator can modify it; cryptographic integrity, OS-level isolation, approvals for writes, and independent goal verification remain future work.
 - Rollback is itself a guarded write, not magic undo: it requires a known backup-relative path and the exact current-file hash, and preserves the replaced current version before restoration.
+
+## Goal contract and independent final verification
+
+Tasks may declare an optional `success_criteria` list. When present, every criterion must contain exactly `criterion_id`, `path`, and `expected_text`. After all declared actions succeed, Ario re-reads each target file and checks the exact text independently of the action sequence. Each result is recorded as a `GOAL_CRITERION_OBSERVED` event. A failed or unreadable criterion changes the final task status to `STOPPED`; no automatic retry, rollback, or corrective write is attempted. Criterion paths are checked for workspace escape and symbolic links before any action runs.
+
+Example task fragment:
+
+```json
+{
+  "task_id": "GOAL-CHECK-001",
+  "goal": "Ensure the declared result file contains the expected text",
+  "actions": [
+    {"step_id": "inspect", "tool": "read_text", "path": "result.txt"}
+  ],
+  "success_criteria": [
+    {
+      "criterion_id": "result-content",
+      "path": "result.txt",
+      "expected_text": "EXPECTED RESULT"
+    }
+  ]
+}
+```
+
+Without `success_criteria`, legacy behavior remains unchanged and `COMPLETED` means only that every declared action returned success. With criteria, `COMPLETED` means all declared criteria passed exact file-content checks; this still does not establish unmodeled semantic properties or make the ledger tamper-proof. This is a deterministic goal contract, not an LLM planner and not unrestricted autonomy.
