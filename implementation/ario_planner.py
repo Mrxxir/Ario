@@ -67,6 +67,9 @@ def _local_ollama_endpoint(base_url: str) -> str:
             raise AgentRequestError("localhost could not be resolved safely") from exc
         if not addresses or not addresses <= {"127.0.0.1", "::1"}:
             raise AgentRequestError("localhost must resolve only to loopback addresses")
+        # Pin the validated address into the URL. Leaving "localhost" here would
+        # trigger a second DNS resolution in urllib, creating a check/use gap.
+        host = "127.0.0.1" if "127.0.0.1" in addresses else "::1"
     return f"http://{host if ':' not in host else '[' + host + ']'}:{port or 11434}/api/chat"
 
 
