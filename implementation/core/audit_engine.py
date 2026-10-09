@@ -14,6 +14,7 @@ from .schema import (
     LineageCandidate,
     LineageEdge,
     RetrievalEvent,
+    Reference,
     TemporalRelation,
     Timestamp,
 )
@@ -27,6 +28,7 @@ class AuditInput:
     retrieval_events: tuple[RetrievalEvent, ...] = ()
     evidence: tuple[Evidence, ...] = ()
     assessments: tuple[Assessment, ...] = ()
+    prior_audit_results: tuple[AuditResult, ...] = ()
     historical_mutation_candidates: tuple[
         HistoricalMutationCandidate, ...
     ] = ()
@@ -73,6 +75,11 @@ class AuditInput:
 
         for assessment in self.assessments:
             references.extend(assessment.admissible_evidence_refs)
+
+        # Prior audit results remain a distinct artifact kind. Recording one
+        # does not make its verdict admissible evidence for an assessment.
+        for result in self.prior_audit_results:
+            references.append(Reference(result.audit_id, "AUDIT_RESULT"))
 
         for candidate in self.historical_mutation_candidates:
             references.extend(
@@ -155,6 +162,7 @@ class AuditEngine:
                 self._check_assessments(
                     artifacts.assessments,
                     artifacts.evidence,
+                    artifacts.prior_audit_results,
                 )
             )
             violations.extend(
@@ -437,19 +445,34 @@ class AuditEngine:
     def _check_assessments(
         assessments: Iterable[Assessment],
         evidence: Iterable[Evidence],
+        prior_audit_results: Iterable[AuditResult] = (),
     ) -> list[str]:
-        evidence_ids = {
-            item.evidence_id
-            for item in evidence
-        }
+        evidence_by_id: dict[str, list[Evidence]] = {}
+        for item in evidence:
+            evidence_by_id.setdefault(item.evidence_id, []).append(item)
 
+        # Resolve actual supplied artifact kinds before considering caller
+        # labels. A matching audit-result ID must never be promoted to evidence.
+        audit_result_ids = {
+            result.audit_id for result in prior_audit_results
+        }
         violations: list[str] = []
 
         for assessment in assessments:
             for reference in assessment.admissible_evidence_refs:
-                if reference.reference_id not in evidence_ids:
-                    violations.append(
-                        "EVIDENCE_INADMISSIBLE"
-                    )
+                reference_id = reference.reference_id
+                if reference_id in audit_result_ids:
+                    violations.append("COMPOSITION_FORBIDDEN")
+                    continue
+
+                matches = evidence_by_id.get(reference_id, [])
+                if len(matches) == 1:
+                    continue
+                if len(matches) > 1:
+                    # Duplicate IDs make the reference ambiguous; do not
+                    # choose an evidence object nondeterministically.
+                    violations.append("UNKNOWN")
+                else:
+                    violations.append("EVIDENCE_INADMISSIBLE")
 
         return violations
