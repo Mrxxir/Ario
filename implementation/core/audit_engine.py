@@ -7,6 +7,8 @@ from .schema import (
     Assessment,
     AuditResult,
     Claim,
+    CompositionConclusion,
+    CompositionRequest,
     Evidence,
     HistoricalState,
     HistoricalMutationCandidate,
@@ -33,6 +35,7 @@ class AuditInput:
         HistoricalMutationCandidate, ...
     ] = ()
     lineage_candidates: tuple[LineageCandidate, ...] = ()
+    composition_requests: tuple[CompositionRequest, ...] = ()
 
     @property
     def artifacts_examined(self) -> tuple:
@@ -80,6 +83,15 @@ class AuditInput:
         # does not make its verdict admissible evidence for an assessment.
         for result in self.prior_audit_results:
             references.append(Reference(result.audit_id, "AUDIT_RESULT"))
+
+        for request in self.composition_requests:
+            references.append(
+                Reference(request.composition_id, "COMPOSITION_REQUEST")
+            )
+            for participant in request.participant_results:
+                references.append(
+                    Reference(participant.audit_id, "AUDIT_RESULT")
+                )
 
         for candidate in self.historical_mutation_candidates:
             references.extend(
@@ -130,6 +142,7 @@ class AuditEngine:
                 artifacts.assessments,
                 artifacts.historical_mutation_candidates,
                 artifacts.lineage_candidates,
+                artifacts.composition_requests,
             )
         )
         if not has_primary_artifacts:
@@ -179,6 +192,13 @@ class AuditEngine:
                 )
             )
             violations.extend(
+                self._check_composition_requests(
+                    artifacts.composition_requests,
+                    artifacts.prior_audit_results,
+                    rule_versions,
+                )
+            )
+            violations.extend(
                 self._check_historical_mutations(
                     artifacts.historical_mutation_candidates,
                     rule_versions,
@@ -208,6 +228,56 @@ class AuditEngine:
             verdict=verdict,
             verdict_basis=verdict_basis,
         )
+
+    @staticmethod
+    def _check_composition_requests(
+        requests: Iterable[CompositionRequest],
+        prior_audit_results: Iterable[AuditResult],
+        rule_versions: tuple[str, ...],
+    ) -> list[str]:
+        violations: list[str] = []
+        supported_rule = "M0-F15-1.0"
+        results_by_id: dict[str, list[AuditResult]] = {}
+
+        for result in prior_audit_results:
+            results_by_id.setdefault(result.audit_id, []).append(result)
+
+        forbidden = {
+            CompositionConclusion.GLOBAL_TRUTH,
+            CompositionConclusion.CLAIM_TRUTH,
+            CompositionConclusion.SAME_ENTITY,
+            CompositionConclusion.ONTOLOGICAL_IDENTITY,
+            CompositionConclusion.CONSCIOUSNESS,
+        }
+
+        for request in requests:
+            if (
+                request.composition_rule_version != supported_rule
+                or supported_rule not in rule_versions
+            ):
+                violations.append("UNKNOWN")
+                continue
+
+            participants = request.participant_results
+            irg_ids = [p.irg_id for p in participants]
+            audit_ids = [p.audit_id for p in participants]
+
+            if (
+                len(participants) != 5
+                or len(set(irg_ids)) != 5
+                or len(set(audit_ids)) != 5
+            ):
+                violations.append("UNKNOWN")
+                continue
+
+            if any(len(results_by_id.get(aid, [])) != 1 for aid in audit_ids):
+                violations.append("UNKNOWN")
+                continue
+
+            if request.requested_conclusion in forbidden:
+                violations.append("COMPOSITION_FORBIDDEN")
+
+        return violations
 
     @staticmethod
     def _check_claim_identity(
