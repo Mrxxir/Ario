@@ -74,7 +74,7 @@ The placeholder hash is illustrative, not executable. If the precondition fails,
 ## Allowlisted tools
 
 - `inspect_directory`: list a directory (maximum 200 entries).
-- `read_text`: read UTF-8 text under the workspace, capped at 20,000 bytes.
+- `read_text`: read UTF-8 text under the workspace in line-aligned chunks capped at 20,000 bytes per action. An optional positive integer `start_line` reads a later chunk; results include `start_line`, `next_start_line`, `bytes`, and `truncated` so callers can continue without overlapping or skipping lines. A single line larger than the cap fails closed. This permits bounded inspection of larger source files without loading the whole file into memory.
 - `file_fingerprint`: read-only SHA-256 and byte count for an existing workspace file; it does not expose file contents or modify the file.
 - `inspect_backup`: read-only SHA-256 and byte count for an existing backup selected by a relative path under the external backup directory; it rejects traversal and symbolic-link paths.
 - `git_status`: run fixed `git status --short --branch`.

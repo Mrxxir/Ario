@@ -65,7 +65,7 @@ def parse_task(payload: Any) -> dict:
     seen: set[str] = set()
     normalized = []
     for index, action in enumerate(actions):
-        if not isinstance(action, dict) or set(action) - {"step_id", "tool", "path", "content", "expected_sha256", "backup_path", "expected_text"}:
+        if not isinstance(action, dict) or set(action) - {"step_id", "tool", "path", "content", "expected_sha256", "backup_path", "expected_text", "start_line"}:
             raise AgentRequestError(f"actions[{index}] has an invalid shape")
         if not {"step_id", "tool"} <= set(action):
             raise AgentRequestError(f"actions[{index}] requires step_id and tool")
@@ -107,9 +107,15 @@ def parse_task(payload: Any) -> dict:
                 raise AgentRequestError(f"actions[{index}] recovery_preflight accepts only backup_path")
         elif "content" in action or "expected_sha256" in action or "backup_path" in action or "expected_text" in action:
             raise AgentRequestError(f"actions[{index}] content/hash/backup/expected_text fields are not valid for this tool")
+        if "start_line" in action:
+            if tool != "read_text":
+                raise AgentRequestError(f"actions[{index}] start_line is valid only for read_text")
+            start_line = action["start_line"]
+            if isinstance(start_line, bool) or not isinstance(start_line, int) or start_line < 1:
+                raise AgentRequestError(f"actions[{index}].start_line must be a positive integer")
         seen.add(step_id)
         normalized_action = {"step_id": step_id, "tool": tool}
-        for field in ("path", "content", "expected_sha256", "backup_path", "expected_text"):
+        for field in ("path", "content", "expected_sha256", "backup_path", "expected_text", "start_line"):
             if field in action:
                 normalized_action[field] = action[field]
         normalized.append(normalized_action)
@@ -445,12 +451,57 @@ def execute_action(action: dict, root: Path, backup_root: Path | None = None) ->
         return {"ok": True, "entries": entries[:200], "truncated": len(entries) > 200}
     if tool == "read_text":
         target = _inside(root, action["path"])
-        if not target.is_file():
-            raise AgentRequestError("read_text target is not a file")
-        raw = target.read_bytes()
-        if len(raw) > MAX_READ_BYTES:
-            raise AgentRequestError(f"read_text is limited to {MAX_READ_BYTES} bytes")
-        return {"ok": True, "path": action["path"], "content": raw.decode("utf-8-sig")}
+        if not target.is_file() or target.is_symlink():
+            raise AgentRequestError("read_text target must be an existing regular file")
+        start_line = action.get("start_line", 1)
+        content = bytearray()
+        lines_read = 0
+        next_start_line = start_line
+        truncated = False
+        with target.open("rb") as stream:
+            current_line = 1
+            while current_line < start_line:
+                skipped = stream.readline(MAX_READ_BYTES + 1)
+                if not skipped:
+                    return {
+                        "ok": True, "path": action["path"], "content": "",
+                        "start_line": start_line, "next_start_line": start_line,
+                        "bytes": 0, "truncated": False,
+                    }
+                if len(skipped) > MAX_READ_BYTES:
+                    raise AgentRequestError(
+                        f"read_text encountered a line longer than {MAX_READ_BYTES} bytes while seeking start_line"
+                    )
+                current_line += 1
+            while len(content) < MAX_READ_BYTES:
+                line_offset = stream.tell()
+                remaining = MAX_READ_BYTES - len(content)
+                line = stream.readline(remaining + 1)
+                if not line:
+                    break
+                if len(line) > remaining:
+                    stream.seek(line_offset)
+                    if not content:
+                        raise AgentRequestError(
+                            f"read_text cannot return a single line longer than {MAX_READ_BYTES} bytes"
+                        )
+                    truncated = True
+                    break
+                content.extend(line)
+                lines_read += 1
+                next_start_line = start_line + lines_read
+            if not truncated:
+                truncated = stream.read(1) != b""
+        encoding = "utf-8-sig" if start_line == 1 else "utf-8"
+        try:
+            decoded = bytes(content).decode(encoding)
+        except UnicodeDecodeError as exc:
+            raise AgentRequestError("read_text chunk is not valid UTF-8 text") from exc
+        return {
+            "ok": True, "path": action["path"], "content": decoded,
+            "start_line": start_line, "next_start_line": next_start_line,
+            "bytes": len(content), "truncated": truncated,
+        }
     if tool == "git_status":
         result = _run(["git", "status", "--short", "--branch"], root)
     elif tool == "compile_python":

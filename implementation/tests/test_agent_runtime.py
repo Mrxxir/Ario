@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ario_agent import AgentRequestError, inspect_execution_lock, inspect_task_history, parse_task, run_task
+from ario_agent import AgentRequestError, execute_action, inspect_execution_lock, inspect_task_history, parse_task, run_task
 
 
 class BoundedAgentTests(unittest.TestCase):
@@ -597,6 +597,48 @@ class BoundedAgentTests(unittest.TestCase):
                 run_task(task, root, ledger)
 
             self.assertFalse(ledger.exists())
+
+
+    def test_read_text_reads_large_files_in_bounded_line_chunks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "large.txt"
+            lines = [f"{index:04d}:" + ("x" * 95) + chr(10) for index in range(300)]
+            expected = "".join(lines)
+            target.write_text(expected, encoding="utf-8", newline="")
+
+            first = execute_action({"tool": "read_text", "path": "large.txt"}, root)
+            self.assertTrue(first["ok"])
+            self.assertTrue(first["truncated"])
+            self.assertLessEqual(first["bytes"], 20_000)
+            self.assertEqual(first["start_line"], 1)
+            self.assertGreater(first["next_start_line"], 1)
+
+            second = execute_action({
+                "tool": "read_text", "path": "large.txt",
+                "start_line": first["next_start_line"],
+            }, root)
+            self.assertFalse(second["truncated"])
+            self.assertEqual(first["content"] + second["content"], expected)
+            self.assertEqual(second["start_line"], first["next_start_line"])
+            self.assertEqual(target.read_text(encoding="utf-8"), expected)
+
+    def test_read_text_start_line_must_be_positive_integer_and_only_for_read_text(self):
+        with self.assertRaisesRegex(AgentRequestError, "positive integer"):
+            parse_task(self.task([{
+                "step_id": "s1", "tool": "read_text", "path": "notes.txt", "start_line": True
+            }]))
+        with self.assertRaisesRegex(AgentRequestError, "only for read_text"):
+            parse_task(self.task([{
+                "step_id": "s1", "tool": "inspect_directory", "path": ".", "start_line": 2
+            }]))
+
+    def test_read_text_rejects_single_line_exceeding_chunk_limit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "long-line.txt").write_text("x" * 20_001, encoding="utf-8")
+            with self.assertRaisesRegex(AgentRequestError, "single line longer"):
+                execute_action({"tool": "read_text", "path": "long-line.txt"}, root)
 
 if __name__ == "__main__":
     unittest.main()
