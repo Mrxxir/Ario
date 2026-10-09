@@ -28,6 +28,16 @@ python .\implementation\ario_agent.py --task "$env:TEMP\ario-task.json" --worksp
 
 The ledger is append-only JSONL. Keep it in a trusted directory and protect it with normal filesystem permissions.
 
+## Read-only execution-lock inspection
+
+If task execution stops unexpectedly, inspect the lock record without changing it:
+
+```powershell
+python .\implementation\ario_agent.py --inspect-lock --ledger "$HOME\Ario\runtime\agent-events.jsonl"
+```
+
+The command reports `NO_LOCK`, `LOCK_PRESENT`, or `UNKNOWN` and never removes a lock. A valid record includes the process ID, task ID, start time, byte count, and SHA-256. A present lock is not proof of a stale process. Before manual removal, check whether the recorded process is still active; malformed records remain `UNKNOWN` and require human inspection.
+
 ## Guarded multi-step workflow
 
 The runtime can combine a hash-preconditioned write, an exact postcondition, and a read-back in one task. The hash must be computed from the actual starting file at task creation time; do not guess or reuse a stale hash.
