@@ -150,8 +150,9 @@ class BoundedAgentTests(unittest.TestCase):
             self.assertEqual(observation["backup_sha256"], hashlib.sha256(before_backup).hexdigest())
             self.assertEqual(target.read_bytes(), before_target)
             self.assertEqual(backup.read_bytes(), before_backup)
-            event = json.loads(ledger.read_text(encoding="utf-8").splitlines()[-1])
-            self.assertEqual(event["steps"][0]["observation"]["assessment"], "DIFFERENT_CONTENT")
+            events = [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
+            step_event = next(event for event in events if event["event"] == "STEP_OBSERVED")
+            self.assertEqual(step_event["observation"]["assessment"], "DIFFERENT_CONTENT")
 
     def test_recovery_preflight_rejects_backup_traversal_before_any_write(self):
         with tempfile.TemporaryDirectory() as directory:
