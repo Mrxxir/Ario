@@ -14,7 +14,7 @@ from typing import Any
 
 MAX_STEPS = 8
 MAX_READ_BYTES = 20_000
-ALLOWED_TOOLS = {"inspect_directory", "read_text", "git_status", "compile_python", "run_tests", "replace_text"}
+ALLOWED_TOOLS = {"inspect_directory", "read_text", "git_status", "compile_python", "run_tests", "replace_text", "restore_backup"}
 
 
 class AgentRequestError(ValueError):
@@ -61,7 +61,7 @@ def parse_task(payload: Any) -> dict:
     seen: set[str] = set()
     normalized = []
     for index, action in enumerate(actions):
-        if not isinstance(action, dict) or set(action) - {"step_id", "tool", "path", "content", "expected_sha256"}:
+        if not isinstance(action, dict) or set(action) - {"step_id", "tool", "path", "content", "expected_sha256", "backup_path"}:
             raise AgentRequestError(f"actions[{index}] has an invalid shape")
         if not {"step_id", "tool"} <= set(action):
             raise AgentRequestError(f"actions[{index}] requires step_id and tool")
@@ -72,7 +72,7 @@ def parse_task(payload: Any) -> dict:
             raise AgentRequestError(f"actions[{index}].step_id must be unique and non-empty")
         if tool not in ALLOWED_TOOLS:
             raise AgentRequestError(f"actions[{index}].tool is not allowlisted")
-        if tool in {"inspect_directory", "read_text", "compile_python", "replace_text"}:
+        if tool in {"inspect_directory", "read_text", "compile_python", "replace_text", "restore_backup"}:
             if not isinstance(action.get("path"), str):
                 raise AgentRequestError(f"actions[{index}] requires a relative path")
         elif "path" in action:
@@ -83,11 +83,19 @@ def parse_task(payload: Any) -> dict:
             expected = action.get("expected_sha256")
             if not isinstance(expected, str) or len(expected) != 64 or any(ch not in "0123456789abcdefABCDEF" for ch in expected):
                 raise AgentRequestError(f"actions[{index}].expected_sha256 must be a 64-character SHA-256 hex digest")
-        elif "content" in action or "expected_sha256" in action:
-            raise AgentRequestError(f"actions[{index}] content/hash fields are only valid for replace_text")
+        elif tool == "restore_backup":
+            if not isinstance(action.get("backup_path"), str) or not action["backup_path"].strip():
+                raise AgentRequestError(f"actions[{index}].backup_path must be a relative backup path")
+            expected = action.get("expected_sha256")
+            if not isinstance(expected, str) or len(expected) != 64 or any(ch not in "0123456789abcdefABCDEF" for ch in expected):
+                raise AgentRequestError(f"actions[{index}].expected_sha256 must be a 64-character SHA-256 hex digest")
+            if "content" in action:
+                raise AgentRequestError(f"actions[{index}] restore_backup does not accept content")
+        elif "content" in action or "expected_sha256" in action or "backup_path" in action:
+            raise AgentRequestError(f"actions[{index}] content/hash/backup fields are not valid for this tool")
         seen.add(step_id)
         normalized_action = {"step_id": step_id, "tool": tool}
-        for field in ("path", "content", "expected_sha256"):
+        for field in ("path", "content", "expected_sha256", "backup_path"):
             if field in action:
                 normalized_action[field] = action[field]
         normalized.append(normalized_action)
@@ -178,8 +186,89 @@ def _replace_existing_text(action: dict, root: Path, backup_root: Path) -> dict:
     }
 
 
+def _restore_existing_backup(action: dict, root: Path, backup_root: Path) -> dict:
+    target = _inside(root, action["path"])
+    if not target.is_file() or target.is_symlink():
+        raise AgentRequestError("restore_backup requires an existing regular target file")
+    candidate = Path(action["backup_path"])
+    if candidate.is_absolute():
+        raise AgentRequestError("backup_path must be relative to the backup directory")
+    backup = (backup_root / candidate).resolve()
+    resolved_backup_root = backup_root.resolve()
+    try:
+        backup.relative_to(resolved_backup_root)
+    except ValueError as exc:
+        raise AgentRequestError("backup_path escapes the backup directory") from exc
+    probe = resolved_backup_root
+    for part in candidate.parts:
+        if part in ("", "."):
+            continue
+        if part == "..":
+            raise AgentRequestError("backup_path traversal is not permitted")
+        probe = probe / part
+        if probe.is_symlink():
+            raise AgentRequestError("symbolic-link backup paths are not permitted")
+    if not backup.is_file():
+        raise AgentRequestError("backup_path does not identify an existing regular file")
+    current_bytes = target.read_bytes()
+    if len(current_bytes) > MAX_READ_BYTES:
+        raise AgentRequestError(f"restore_backup is limited to {MAX_READ_BYTES} current bytes")
+    current_hash = hashlib.sha256(current_bytes).hexdigest()
+    if current_hash != action["expected_sha256"].lower():
+        raise AgentRequestError("SHA-256 precondition failed; target was not changed")
+    backup_bytes = backup.read_bytes()
+    if len(backup_bytes) > MAX_READ_BYTES:
+        raise AgentRequestError(f"restore_backup is limited to {MAX_READ_BYTES} backup bytes")
+    backup_hash = hashlib.sha256(backup_bytes).hexdigest()
+    relative = target.relative_to(root)
+    preserve = backup_root / datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ") / "rollback-preimage" / relative
+    preserve.parent.mkdir(parents=True, exist_ok=False)
+    preserve.write_bytes(current_bytes)
+    temp_name = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="wb", dir=target.parent, prefix=".ario-restore-", delete=False) as temp:
+            temp.write(backup_bytes)
+            temp.flush()
+            os.fsync(temp.fileno())
+            temp_name = temp.name
+        os.replace(temp_name, target)
+        temp_name = None
+        restored_hash = hashlib.sha256(target.read_bytes()).hexdigest()
+        if restored_hash != backup_hash:
+            raise AgentRequestError("restored file hash verification failed")
+    except Exception:
+        if temp_name and os.path.exists(temp_name):
+            os.unlink(temp_name)
+        restore_name = None
+        try:
+            with tempfile.NamedTemporaryFile(mode="wb", dir=target.parent, prefix=".ario-recover-", delete=False) as recovery:
+                recovery.write(current_bytes)
+                recovery.flush()
+                os.fsync(recovery.fileno())
+                restore_name = recovery.name
+            os.replace(restore_name, target)
+            restore_name = None
+        finally:
+            if restore_name and os.path.exists(restore_name):
+                os.unlink(restore_name)
+        raise
+    return {
+        "ok": True,
+        "path": str(relative),
+        "restored_from": str(backup),
+        "preserved_current_version": str(preserve),
+        "before_sha256": current_hash,
+        "after_sha256": restored_hash,
+        "verified": True,
+    }
+
+
 def execute_action(action: dict, root: Path, backup_root: Path | None = None) -> dict:
     tool = action["tool"]
+    if tool == "restore_backup":
+        if backup_root is None:
+            raise AgentRequestError("restore_backup requires an external backup directory")
+        return _restore_existing_backup(action, root, backup_root)
     if tool == "replace_text":
         if backup_root is None:
             raise AgentRequestError("replace_text requires an external backup directory")

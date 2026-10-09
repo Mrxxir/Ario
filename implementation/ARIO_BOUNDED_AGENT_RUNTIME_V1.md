@@ -36,6 +36,7 @@ The ledger is append-only JSONL. Keep it in a trusted directory and protect it w
 - `compile_python`: compile one existing `.py` file.
 - `run_tests`: run the fixed `python -m pytest -q tests` command from `implementation/`.
 - `replace_text`: replace an existing UTF-8 text file only when its current SHA-256 matches the task's expected hash. It writes a byte-for-byte backup outside the workspace (under the ledger directory's `backups/` folder), atomically replaces the file, and verifies the resulting hash. Original and replacement content are capped at 20,000 bytes.
+- `restore_backup`: restore a backup selected by a relative path beneath the external `backups/` folder, only when the current target's SHA-256 matches the task's expected hash. Before restoration, it preserves the current target as a new backup and verifies the restored hash. A backup path cannot escape the backup folder.
 
 There is no arbitrary shell, arbitrary command, network, delete-file, or privilege-escalation tool. The sole write capability is `replace_text`, which requires a precondition hash and an external backup. It must not be used for critical files without a separate review. Paths must be relative and remain within the resolved workspace. Each subprocess uses `shell=False` and a timeout.
 
@@ -46,3 +47,4 @@ There is no arbitrary shell, arbitrary command, network, delete-file, or privile
 - A failed step stops the task; no automatic retry or corrective write is attempted.
 - `COMPLETED` means all declared steps returned success. It does **not** prove the natural-language goal was semantically achieved.
 - The event ledger is an audit aid, not tamper-proof storage. A local administrator can modify it; cryptographic integrity, OS-level isolation, approvals for writes, and independent goal verification remain future work.
+- Rollback is itself a guarded write, not magic undo: it requires a known backup-relative path and the exact current-file hash, and preserves the replaced current version before restoration.
