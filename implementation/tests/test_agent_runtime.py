@@ -82,6 +82,47 @@ class BoundedAgentTests(unittest.TestCase):
             self.assertEqual(target.read_text(encoding="utf-8"), "keep")
             self.assertIn("SHA-256 precondition failed", result["steps"][0]["observation"]["error"])
 
+    def test_restore_backup_requires_hash_and_preserves_current_version(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "workspace"
+            root.mkdir()
+            target = root / "notes.txt"
+            target.write_text("new version", encoding="utf-8")
+            ledger = Path(directory) / "state" / "events.jsonl"
+            backup = ledger.parent / "backups" / "fixture" / "notes.txt"
+            backup.parent.mkdir(parents=True)
+            backup.write_text("old version", encoding="utf-8")
+            expected = hashlib.sha256(b"new version").hexdigest()
+            task = self.task([{
+                "step_id": "s1", "tool": "restore_backup", "path": "notes.txt",
+                "backup_path": "fixture/notes.txt", "expected_sha256": expected,
+            }])
+            result = run_task(task, root, ledger)
+            self.assertEqual(result["status"], "COMPLETED")
+            self.assertEqual(target.read_text(encoding="utf-8"), "old version")
+            observation = result["steps"][0]["observation"]
+            self.assertTrue(observation["verified"])
+            preserved = Path(observation["preserved_current_version"])
+            self.assertEqual(preserved.read_text(encoding="utf-8"), "new version")
+
+    def test_restore_backup_hash_mismatch_does_not_change_target(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "workspace"
+            root.mkdir()
+            target = root / "notes.txt"
+            target.write_text("keep this", encoding="utf-8")
+            ledger = Path(directory) / "state" / "events.jsonl"
+            backup = ledger.parent / "backups" / "fixture" / "notes.txt"
+            backup.parent.mkdir(parents=True)
+            backup.write_text("old", encoding="utf-8")
+            task = self.task([{
+                "step_id": "s1", "tool": "restore_backup", "path": "notes.txt",
+                "backup_path": "fixture/notes.txt", "expected_sha256": "0" * 64,
+            }])
+            result = run_task(task, root, ledger)
+            self.assertEqual(result["status"], "STOPPED")
+            self.assertEqual(target.read_text(encoding="utf-8"), "keep this")
+
     def test_stops_after_first_failed_observation(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
