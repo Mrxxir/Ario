@@ -52,9 +52,11 @@ def parse_workflow(payload: Any) -> dict:
             if not isinstance(condition, dict) or set(condition) != {"stage_id", "status"}:
                 raise AgentRequestError(f"stages[{index}].when must contain exactly stage_id and status")
             ref_id, expected_status = condition["stage_id"], condition["status"]
+            if not isinstance(ref_id, str) or not ref_id.strip():
+                raise AgentRequestError(f"stages[{index}].when.stage_id must be a non-empty string")
             if ref_id not in stage_ids:
                 raise AgentRequestError(f"stages[{index}].when must reference an earlier stage")
-            if expected_status not in {"COMPLETED", "STOPPED"}:
+            if not isinstance(expected_status, str) or expected_status not in {"COMPLETED", "STOPPED"}:
                 raise AgentRequestError(f"stages[{index}].when.status must be COMPLETED or STOPPED")
             normalized_condition = {"stage_id": ref_id, "status": expected_status}
 
