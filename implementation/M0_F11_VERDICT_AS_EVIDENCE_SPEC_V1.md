@@ -2,7 +2,7 @@
 
 ## Status
 
-**IMPLEMENTED ON PR BRANCH; TARGETED M0 REGRESSION SUITE PASSED; F11 ACCEPTANCE PENDING FINAL CODE REVIEW**
+**IMPLEMENTED ON PR BRANCH; PRIOR REGRESSION RUN PASSED; REVIEW AMENDMENTS AWAITING THEIR OWN CI RUN; F11 NOT ACCEPTED**
 
 Pre-registration source: `implementation/M0_PRE_REGISTRATION_V1.md`, fixture F11.
 Reviewed baseline: `23d45feb3efcada7cc821e6202ae8a9a5613ecfc`.
@@ -15,7 +15,8 @@ This document does not modify or reinterpret the frozen pre-registration.
 - Command: `python -m pytest -q tests/test_m0_regression.py`
 - Result: **42 passed in 0.09s**
 - Tested pull-request merge ref: `ad12d0723d0e5f4e5f5e473aa9644f4b6e9ba66c`, combining PR head `e7972d548ffaf5e03e99047992cdcfedf9851f55` with base `23d45feb3efcada7cc821e6202ae8a9a5613ecfc`.
-- Scope limitation: this confirms the named regression file passed on that tested merge ref. It is not proof of all possible adversarial coverage, nor an ontology/truth claim. Any subsequent commit must be validated by its own workflow run.
+- Scope limitation: this confirms the named regression file passed on that tested merge ref. It is not proof of all possible adversarial coverage, nor an ontology/truth claim. The later review amendments below have not yet been validated by their own workflow run.
+- Review amendment commits: `00b83c54366ea66cf0db500c4c408ffd4e1b3d05` and `8039a3c96e284fb878bfe6a6433949b67a4a0f87`; fresh CI result pending.
 
 ## 1. Threat model
 
@@ -28,7 +29,7 @@ An assessment or downstream audit may cite an earlier audit's verdict (for examp
 - **Audit-result reference:** points to an `AuditResult`, including verdict, basis, inspector/rule versions, scope, and run identity.
 - **Assessment basis:** explicitly states which admissible evidence references support an assessment. Audit-result references must remain separately typed and must never be implicitly cast to evidence.
 
-A generic `Reference` or a caller-supplied label is insufficient to change one category into another. Resolution must inspect the actual supplied artifact collections and detect missing or ambiguous IDs.
+A generic `Reference` or a caller-supplied label is insufficient to change one category into another. Resolution must inspect the actual supplied artifact collections and detect missing or ambiguous IDs. The specialized F11 classification is activated only when `M0-F11-1.0` is declared in `rule_versions`; without that version, an audit-result-only ID remains inadmissible under the legacy assessment path rather than receiving the F11-specific classification. If one ID resolves across Evidence and AuditResult, or to multiple AuditResults, the result is `UNKNOWN` rather than a preferred-kind decision.
 
 ## 3. Normative invariants
 
@@ -66,6 +67,8 @@ Do not silently produce `PASS` for an unresolved reference. Avoid emitting multi
 | F11-F | Audit result is recorded in a separately typed result field | No F11 violation solely for recording a result; no evidence/truth upgrade |
 | F11-G | Same underlying observation is referenced by evidence and a derived verdict | Must not count the verdict as an additional independent observation |
 | F11-H | Verdict is PASS versus FAIL while artifact typing is identical | Classification depends on artifact kind, not favorable/unfavorable verdict |
+| F11-I | F11 rule version is absent from declared rule versions | Do not emit the F11-specific classification; legacy unresolved-reference behavior remains |
+| F11-J | Evidence ID collides with an audit-result ID, or audit-result IDs are duplicated | Return UNKNOWN; do not silently choose a kind or result |
 
 ## 6. False-positive controls
 
@@ -88,4 +91,4 @@ Do not modify `M0_PRE_REGISTRATION_V1.md` or overwrite an earlier capability rec
 
 F11 is accepted only when adversarial cases reject verdict laundering, false-positive controls preserve legitimate evidence, and the complete regression suite passes in a reproducible recorded run. Source presence, a design document, or unexecuted test definitions are not acceptance evidence.
 
-**Current classification: REGRESSION SUITE PASSED ON RECORDED PR MERGE REF / FINAL CODE REVIEW PENDING / NOT ACCEPTED.**
+**Current classification: PRIOR REGRESSION RUN PASSED / REVIEW AMENDMENTS AWAITING CI / FINAL CODE REVIEW PENDING / NOT ACCEPTED.**
