@@ -232,6 +232,22 @@ class LocalOllamaPlannerTests(unittest.TestCase):
             self.assertFalse(test_actions[0]["expected_truncated"])
             self.assertLessEqual(len(actions), 8)
 
+            result = ario_planner.run_workflow(plan, directory, Path(directory) / "events.jsonl")
+            self.assertEqual(result["status"], "COMPLETED")
+            steps = result["stages"][0]["task_result"]["steps"]
+            for relative in (
+                "implementation/ario_planner.py",
+                "implementation/tests/test_planner_runtime.py",
+            ):
+                observed = "".join(
+                    step["observation"]["content"]
+                    for step in steps
+                    if step["observation"].get("path") == relative
+                )
+                expected = (Path(directory) / relative).read_text(encoding="utf-8")
+                self.assertEqual(observed, expected, relative)
+            self.assertTrue(all(step["status"] == "SUCCEEDED" for step in steps))
+
     @patch("ario_planner.urllib.request.urlopen")
     def test_recommendation_schema_error_gets_one_correction_attempt(self, urlopen):
         with tempfile.TemporaryDirectory() as directory:
