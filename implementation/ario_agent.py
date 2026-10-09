@@ -110,7 +110,12 @@ def execute_action(action: dict, root: Path) -> dict:
         target = _inside(root, action["path"])
         if not target.is_file() or target.suffix != ".py":
             raise AgentRequestError("compile_python requires an existing .py file")
-        result = _run([sys.executable, "-m", "py_compile", str(target)], root)
+        # Compile in memory so this inspection tool does not create __pycache__ files.
+        result = _run([
+            sys.executable, "-c",
+            "from pathlib import Path; import sys; p=Path(sys.argv[1]); compile(p.read_text(encoding='utf-8-sig'), str(p), 'exec')",
+            str(target),
+        ], root)
     elif tool == "run_tests":
         tests = root / "implementation" / "tests"
         if not tests.is_dir():
