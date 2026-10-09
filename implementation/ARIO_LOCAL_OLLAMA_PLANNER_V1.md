@@ -38,7 +38,7 @@ python .\implementation\ario_planner.py --goal "Inspect the Ario implementation 
 
 ## Boundaries
 
-- Only plain HTTP loopback Ollama endpoints are accepted; remote hosts and HTTPS endpoints are rejected.
+- Only plain HTTP loopback Ollama endpoints are accepted; remote hosts and HTTPS endpoints are rejected. When `localhost` is supplied, Ario validates its DNS results and rewrites the endpoint to the validated numeric loopback address so the HTTP client does not resolve the hostname a second time.
 - The metadata inventory lists at most 250 workspace entries, omits common generated/dependency directories and symbolic links, and includes bounded Git status text. Separate planning context is restricted to the fixed allowlist and size limits above.
 - Ollama responses are capped at 1 MB. The goal is capped at 2,000 characters. The existing workflow limit is eight stages and each task is limited to eight actions.
 - Unknown fields, unsupported tools, invalid branch conditions, and workspace path escapes are rejected before execution.
