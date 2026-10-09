@@ -163,6 +163,7 @@ class AuditEngine:
                     artifacts.assessments,
                     artifacts.evidence,
                     artifacts.prior_audit_results,
+                    rule_versions,
                 )
             )
             violations.extend(
@@ -446,31 +447,47 @@ class AuditEngine:
         assessments: Iterable[Assessment],
         evidence: Iterable[Evidence],
         prior_audit_results: Iterable[AuditResult] = (),
+        rule_versions: tuple[str, ...] = (),
     ) -> list[str]:
         evidence_by_id: dict[str, list[Evidence]] = {}
         for item in evidence:
             evidence_by_id.setdefault(item.evidence_id, []).append(item)
 
-        # Resolve actual supplied artifact kinds before considering caller
-        # labels. A matching audit-result ID must never be promoted to evidence.
-        audit_result_ids = {
-            result.audit_id for result in prior_audit_results
-        }
+        # F11 is opt-in by declared rule version, matching the engine's
+        # versioned F05/F07 behavior. Without F11, legacy assessment resolution
+        # remains unchanged and an audit-result-only ID is simply inadmissible.
+        f11_enabled = "M0-F11-1.0" in rule_versions
+        audit_results_by_id: dict[str, list[AuditResult]] = {}
+        if f11_enabled:
+            for result in prior_audit_results:
+                audit_results_by_id.setdefault(result.audit_id, []).append(result)
+
         violations: list[str] = []
 
         for assessment in assessments:
             for reference in assessment.admissible_evidence_refs:
                 reference_id = reference.reference_id
-                if reference_id in audit_result_ids:
-                    violations.append("COMPOSITION_FORBIDDEN")
-                    continue
-
                 matches = evidence_by_id.get(reference_id, [])
+
+                if f11_enabled:
+                    result_matches = audit_results_by_id.get(reference_id, [])
+                    if result_matches and matches:
+                        # Cross-kind ID collision is ambiguous; neither kind
+                        # may silently override the other.
+                        violations.append("UNKNOWN")
+                        continue
+                    if len(result_matches) > 1:
+                        # Duplicate audit-result IDs are ambiguous too.
+                        violations.append("UNKNOWN")
+                        continue
+                    if len(result_matches) == 1:
+                        violations.append("COMPOSITION_FORBIDDEN")
+                        continue
+
                 if len(matches) == 1:
                     continue
                 if len(matches) > 1:
-                    # Duplicate IDs make the reference ambiguous; do not
-                    # choose an evidence object nondeterministically.
+                    # Duplicate evidence IDs make the reference ambiguous.
                     violations.append("UNKNOWN")
                 else:
                     violations.append("EVIDENCE_INADMISSIBLE")
