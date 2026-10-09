@@ -79,6 +79,28 @@ class LocalOllamaPlannerTests(unittest.TestCase):
             context = build_observation(root)["planning_context"]
             self.assertEqual([item["path"] for item in context], list(paths[:4]))
 
+    def test_context_budget_keeps_both_approved_implementation_test_pairs_available(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            paths = (
+                "implementation/ario_planner.py",
+                "implementation/tests/test_planner_runtime.py",
+                "implementation/ario_workflow.py",
+                "implementation/tests/test_workflow_runtime.py",
+            )
+            for relative in paths:
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("x" * 5_000, encoding="utf-8")
+
+            context = build_observation(root)["planning_context"]
+            observed_paths = {item["path"] for item in context}
+            self.assertEqual(observed_paths, set(paths))
+            self.assertLessEqual(
+                sum(len(item["content"]) for item in context),
+                ario_planner.MAX_CONTEXT_TOTAL_CHARS,
+            )
+
     def test_endpoint_accepts_loopback_and_rejects_remote_hosts(self):
         self.assertEqual(_local_ollama_endpoint("http://127.0.0.1:11434"), "http://127.0.0.1:11434/api/chat")
         with self.assertRaisesRegex(AgentRequestError, "loopback"):

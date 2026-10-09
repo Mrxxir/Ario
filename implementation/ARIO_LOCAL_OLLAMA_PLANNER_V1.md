@@ -4,7 +4,7 @@
 
 \`ario_planner.py\` connects a locally running Ollama model to Ario's bounded workflow runtime. It collects a bounded read-only workspace inventory and Git status, adds a bounded allowlist of implementation/test excerpts, asks the local model for a declarative workflow, validates the response against \`ario_workflow.py\`, validates relative paths, and assigns runtime task IDs locally.
 
-The planner does not read arbitrary workspace files. In addition to the metadata inventory, it reads small excerpts from a fixed allowlist of implementation modules and regression tests (at most four files, 4,000 bytes per file, and 12,000 characters total) and sends those excerpts to the local Ollama model as untrusted planning context. It does not read user files, secrets, or arbitrary paths for this context. The model can request bounded \`read_text\` steps in its proposed workflow; those steps only run if execution is explicitly requested.
+The planner does not read arbitrary workspace files. In addition to the metadata inventory, it reads small excerpts from a fixed allowlist of implementation modules and regression tests (at most four files, 4,000 bytes per file, and 16,000 characters total) and sends those excerpts to the local Ollama model as untrusted planning context. It does not read user files, secrets, or arbitrary paths for this context. The model can request bounded \`read_text\` steps in its proposed workflow; those steps only run if execution is explicitly requested.
 
 ## Requirements
 
