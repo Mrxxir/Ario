@@ -104,6 +104,22 @@ class LocalOllamaPlannerTests(unittest.TestCase):
             self.assertIn("planning_context", correction)
 
     @patch("ario_planner.urllib.request.urlopen")
+    def test_first_stage_condition_gets_explicit_correction_guidance(self, urlopen):
+        with tempfile.TemporaryDirectory() as directory:
+            invalid = self.valid_workflow()
+            invalid["stages"][0]["when"] = {"stage_id": "inspect", "status": "COMPLETED"}
+            corrected = self.valid_workflow()
+            urlopen.side_effect = [ollama_response(invalid), ollama_response(corrected)]
+            plan = request_plan("Inspect repository", directory)
+            self.assertEqual(len(plan["stages"]), 1)
+            self.assertNotIn("when", plan["stages"][0])
+            self.assertEqual(urlopen.call_count, 2)
+            second_request = json.loads(urlopen.call_args_list[1].args[0].data.decode("utf-8"))
+            correction = second_request["messages"][-1]["content"]
+            self.assertIn("first stage MUST omit the when field", correction)
+            self.assertIn("stage_id earlier in the stages list", correction)
+
+    @patch("ario_planner.urllib.request.urlopen")
     def test_schema_error_stops_after_one_correction_attempt(self, urlopen):
         with tempfile.TemporaryDirectory() as directory:
             invalid = self.valid_workflow()
