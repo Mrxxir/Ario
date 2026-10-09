@@ -34,6 +34,30 @@ class LocalOllamaPlannerTests(unittest.TestCase):
             }],
         }
 
+    def test_planner_prompt_requires_distinct_source_and_test_evidence(self):
+        self.assertIn("exactly TWO actions", ario_planner.SYSTEM_PROMPT)
+        self.assertIn('"tool": "read_text"', ario_planner.SYSTEM_PROMPT)
+        self.assertIn("Do not use inspect_directory", ario_planner.SYSTEM_PROMPT)
+        self.assertIn("concrete bounded engineering question", ario_planner.SYSTEM_PROMPT)
+
+    def test_planning_context_prioritizes_planner_and_its_tests(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            paths = (
+                "implementation/ario_planner.py",
+                "implementation/tests/test_planner_runtime.py",
+                "implementation/ario_workflow.py",
+                "implementation/tests/test_workflow_runtime.py",
+                "implementation/ario_agent.py",
+                "implementation/tests/test_agent_runtime.py",
+            )
+            for relative in paths:
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(f"# evidence from {relative}\\n", encoding="utf-8")
+            context = build_observation(root)["planning_context"]
+            self.assertEqual([item["path"] for item in context], list(paths[:4]))
+
     def test_endpoint_accepts_loopback_and_rejects_remote_hosts(self):
         self.assertEqual(
             _local_ollama_endpoint("http://127.0.0.1:11434"),
