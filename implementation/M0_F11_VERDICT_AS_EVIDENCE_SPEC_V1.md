@@ -2,7 +2,7 @@
 
 ## Status
 
-**DESIGN SPECIFICATION — NOT IMPLEMENTED; NOT EXECUTED; NOT ACCEPTANCE EVIDENCE**
+**DESIGN SPECIFICATION — IMPLEMENTED ON PR BRANCH; RUNTIME TESTS NOT CONFIRMED; NOT ACCEPTANCE EVIDENCE**
 
 Pre-registration source: `implementation/M0_PRE_REGISTRATION_V1.md`, fixture F11.
 Reviewed baseline: `23d45feb3efcada7cc821e6202ae8a9a5613ecfc`.
@@ -79,4 +79,4 @@ Do not modify `M0_PRE_REGISTRATION_V1.md` or overwrite an earlier capability rec
 
 F11 is accepted only when adversarial cases reject verdict laundering, false-positive controls preserve legitimate evidence, and the complete regression suite passes in a reproducible recorded run. Source presence, a design document, or unexecuted test definitions are not acceptance evidence.
 
-**Current classification: UNIMPLEMENTED / NOT TESTED.**
+**Current classification: IMPLEMENTED ON PR BRANCH / RUNTIME TESTS NOT CONFIRMED / NOT ACCEPTED.**
