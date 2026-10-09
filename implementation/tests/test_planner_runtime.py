@@ -1,5 +1,6 @@
 import io
 import json
+import socket
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -107,6 +108,27 @@ class LocalOllamaPlannerTests(unittest.TestCase):
             _local_ollama_endpoint("http://example.com:11434")
         with self.assertRaisesRegex(AgentRequestError, "loopback"):
             _local_ollama_endpoint("https://127.0.0.1:11434")
+
+    @patch("ario_planner.socket.getaddrinfo")
+    def test_localhost_endpoint_pins_validated_loopback_ip(self, getaddrinfo):
+        getaddrinfo.return_value = [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 11434)),
+        ]
+
+        endpoint = _local_ollama_endpoint("http://localhost:11434")
+
+        self.assertEqual(endpoint, "http://127.0.0.1:11434/api/chat")
+        getaddrinfo.assert_called_once_with("localhost", 11434, type=socket.SOCK_STREAM)
+
+    @patch("ario_planner.socket.getaddrinfo")
+    def test_localhost_endpoint_rejects_mixed_loopback_and_remote_resolution(self, getaddrinfo):
+        getaddrinfo.return_value = [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 11434)),
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("192.168.1.25", 11434)),
+        ]
+
+        with self.assertRaisesRegex(AgentRequestError, "only to loopback"):
+            _local_ollama_endpoint("http://localhost:11434")
 
     def test_observation_is_bounded_metadata_and_does_not_read_file_contents(self):
         with tempfile.TemporaryDirectory() as directory:
