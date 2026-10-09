@@ -14,7 +14,7 @@ from typing import Any
 
 MAX_STEPS = 8
 MAX_READ_BYTES = 20_000
-ALLOWED_TOOLS = {"inspect_directory", "read_text", "git_status", "compile_python", "run_tests", "replace_text", "restore_backup", "verify_text"}
+ALLOWED_TOOLS = {"inspect_directory", "read_text", "file_fingerprint", "inspect_backup", "git_status", "compile_python", "run_tests", "replace_text", "restore_backup", "verify_text"}
 
 
 class AgentRequestError(ValueError):
@@ -72,7 +72,7 @@ def parse_task(payload: Any) -> dict:
             raise AgentRequestError(f"actions[{index}].step_id must be unique and non-empty")
         if tool not in ALLOWED_TOOLS:
             raise AgentRequestError(f"actions[{index}].tool is not allowlisted")
-        if tool in {"inspect_directory", "read_text", "compile_python", "replace_text", "restore_backup", "verify_text"}:
+        if tool in {"inspect_directory", "read_text", "file_fingerprint", "inspect_backup", "compile_python", "replace_text", "restore_backup", "verify_text"}:
             if not isinstance(action.get("path"), str):
                 raise AgentRequestError(f"actions[{index}] requires a relative path")
         elif "path" in action:
@@ -268,8 +268,47 @@ def _restore_existing_backup(action: dict, root: Path, backup_root: Path) -> dic
     }
 
 
+def _inspect_backup(action: dict, backup_root: Path) -> dict:
+    candidate = Path(action["path"])
+    if candidate.is_absolute() or any(part == ".." for part in candidate.parts):
+        raise AgentRequestError("inspect_backup path must remain beneath the backup directory")
+    backup_root = backup_root.resolve()
+    probe = backup_root
+    for part in candidate.parts:
+        if part in ("", "."):
+            continue
+        probe = probe / part
+        if probe.is_symlink():
+            raise AgentRequestError("symbolic-link backup paths are not permitted")
+    target = probe.resolve()
+    try:
+        target.relative_to(backup_root)
+    except ValueError as exc:
+        raise AgentRequestError("inspect_backup path escapes the backup directory") from exc
+    if not target.is_file():
+        raise AgentRequestError("inspect_backup requires an existing regular backup file")
+    raw = target.read_bytes()
+    if len(raw) > MAX_READ_BYTES:
+        raise AgentRequestError(f"inspect_backup is limited to {MAX_READ_BYTES} bytes")
+    return {"ok": True, "backup_path": str(candidate), "bytes": len(raw),
+            "sha256": hashlib.sha256(raw).hexdigest()}
+
+
 def execute_action(action: dict, root: Path, backup_root: Path | None = None) -> dict:
     tool = action["tool"]
+    if tool == "file_fingerprint":
+        target = _inside(root, action["path"])
+        if not target.is_file() or target.is_symlink():
+            raise AgentRequestError("file_fingerprint requires an existing regular file")
+        raw = target.read_bytes()
+        if len(raw) > MAX_READ_BYTES:
+            raise AgentRequestError(f"file_fingerprint is limited to {MAX_READ_BYTES} bytes")
+        return {"ok": True, "path": action["path"], "bytes": len(raw),
+                "sha256": hashlib.sha256(raw).hexdigest()}
+    if tool == "inspect_backup":
+        if backup_root is None:
+            raise AgentRequestError("inspect_backup requires an external backup directory")
+        return _inspect_backup(action, backup_root)
     if tool == "verify_text":
         target = _inside(root, action["path"])
         if not target.is_file():
