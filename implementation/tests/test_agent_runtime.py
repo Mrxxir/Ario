@@ -442,18 +442,25 @@ class BoundedAgentTests(unittest.TestCase):
                 {"event": "TASK_FINISHED", "task_id": "X", "status": "COMPLETED"},
             ],
         }
+        expected_errors = {
+            "failed_step": "completed task has failed or unrecognized step observations",
+            "failed_criterion": "completed task has failed or unrecognized goal criteria",
+            "step_after_finish": "task events appear after TASK_FINISHED",
+            "event_before_start": "task event precedes TASK_STARTED",
+        }
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             for name, events in cases.items():
                 with self.subTest(case=name):
                     ledger = root / f"{name}.jsonl"
                     ledger.write_text(
-                        "\\n".join(json.dumps(event) for event in events) + "\\n",
+                        "\n".join(json.dumps(event) for event in events) + "\n",
                         encoding="utf-8",
                     )
                     before = ledger.read_bytes()
                     result = inspect_task_history("X", ledger)
                     self.assertEqual(result["status"], "UNKNOWN")
+                    self.assertEqual(result.get("error"), expected_errors[name])
                     self.assertFalse(result["automatic_resume"])
                     self.assertFalse(result["write_performed"])
                     self.assertEqual(ledger.read_bytes(), before)
