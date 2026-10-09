@@ -51,7 +51,7 @@ class LocalOllamaPlannerTests(unittest.TestCase):
             observation = build_observation(root)
             self.assertIn({"path": "private.txt", "kind": "file"}, observation["entries"])
             self.assertNotIn("secret body must not be sent", json.dumps(observation))
-            self.assertIn("file contents were not read", observation["note"])
+            self.assertIn("no file contents were read", observation["note"])
 
     @patch("ario_planner.urllib.request.urlopen")
     def test_valid_plan_is_schema_checked_and_runtime_ids_are_local(self, urlopen):
