@@ -868,6 +868,79 @@ def test_f11_g_a_verdict_does_not_inflate_its_underlying_observation():
 
     assert "EVIDENCE_INFLATION" not in r.violations
     assert r.verdict == "PASS"
+    # The nested result's examined observation is not re-expanded as a second
+    # observation in this audit's own examined-artifact list.
+    assert sum(
+        item.reference_id == "OBS-F11-G"
+        for item in r.artifacts_examined
+    ) == 1
+
+
+def test_f11_requires_its_rule_version_to_emit_composition_forbidden():
+    result = _f11_audit_result("AUDIT-F11-VERSION", "PASS")
+    assessment = _f11_assessment(
+        "ASSESS-F11-VERSION",
+        (ref("AUDIT-F11-VERSION"),),
+    )
+
+    # Use the legacy declared rule set intentionally: F11's specialized
+    # classification must not activate without its declared rule version.
+    r = run(
+        "F11-VERSION-NOT-DECLARED",
+        AuditInput(assessments=(assessment,), prior_audit_results=(result,)),
+        rule_versions=("M0-1.0",),
+    )
+
+    assert "COMPOSITION_FORBIDDEN" not in r.violations
+    assert "EVIDENCE_INADMISSIBLE" in r.violations
+    assert r.verdict == "FAIL"
+
+
+def test_f11_cross_kind_id_collision_remains_unknown():
+    ev = evidence(
+        "SHARED-F11-ID",
+        ("OBS-F11-COLLISION",),
+        IndependenceStatus.INDEPENDENT,
+    )
+    result = _f11_audit_result("SHARED-F11-ID", "PASS")
+    assessment = _f11_assessment(
+        "ASSESS-F11-COLLISION",
+        (ref("SHARED-F11-ID"),),
+    )
+
+    r = _run_f11(
+        "F11-CROSS-KIND-COLLISION",
+        AuditInput(
+            evidence=(ev,),
+            assessments=(assessment,),
+            prior_audit_results=(result,),
+        ),
+    )
+
+    assert "UNKNOWN" in r.violations
+    assert "COMPOSITION_FORBIDDEN" not in r.violations
+    assert r.verdict == "FAIL"
+
+
+def test_f11_duplicate_audit_result_ids_remain_unknown():
+    first = _f11_audit_result("DUPLICATE-AUDIT-ID", "PASS")
+    second = _f11_audit_result("DUPLICATE-AUDIT-ID", "FAIL")
+    assessment = _f11_assessment(
+        "ASSESS-F11-DUPLICATE-AUDIT-ID",
+        (ref("DUPLICATE-AUDIT-ID"),),
+    )
+
+    r = _run_f11(
+        "F11-DUPLICATE-AUDIT-ID",
+        AuditInput(
+            assessments=(assessment,),
+            prior_audit_results=(first, second),
+        ),
+    )
+
+    assert "UNKNOWN" in r.violations
+    assert "COMPOSITION_FORBIDDEN" not in r.violations
+    assert r.verdict == "FAIL"
 
 
 def test_f11_h_verdict_polarity_does_not_change_artifact_type_classification():
