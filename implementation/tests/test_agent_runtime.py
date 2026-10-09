@@ -603,7 +603,7 @@ class BoundedAgentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             target = root / "large.txt"
-            lines = [f"{index:04d}:" + ("x" * 95) + "\\n" for index in range(300)]
+            lines = [f"{index:04d}:" + ("x" * 95) + chr(10) for index in range(300)]
             expected = "".join(lines)
             target.write_text(expected, encoding="utf-8", newline="")
 
