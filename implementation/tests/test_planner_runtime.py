@@ -90,6 +90,30 @@ class LocalOllamaPlannerTests(unittest.TestCase):
             self.assertEqual(urlopen.call_args.kwargs["timeout"], 300)
 
     @patch("ario_planner.urllib.request.urlopen")
+    def test_schema_error_gets_one_correction_attempt(self, urlopen):
+        with tempfile.TemporaryDirectory() as directory:
+            invalid = self.valid_workflow()
+            invalid["unexpected"] = "model echoed unrelated context"
+            urlopen.side_effect = [ollama_response(invalid), ollama_response(self.valid_workflow())]
+            plan = request_plan("Inspect repository", directory)
+            self.assertEqual(len(plan["stages"]), 1)
+            self.assertEqual(urlopen.call_count, 2)
+            second_request = json.loads(urlopen.call_args_list[1].args[0].data.decode("utf-8"))
+            correction = second_request["messages"][-1]["content"]
+            self.assertIn("exactly these top-level keys", correction)
+            self.assertIn("planning_context", correction)
+
+    @patch("ario_planner.urllib.request.urlopen")
+    def test_schema_error_stops_after_one_correction_attempt(self, urlopen):
+        with tempfile.TemporaryDirectory() as directory:
+            invalid = self.valid_workflow()
+            invalid["unexpected"] = "extra"
+            urlopen.side_effect = [ollama_response(invalid), ollama_response(invalid)]
+            with self.assertRaisesRegex(AgentRequestError, "remained invalid after one correction attempt"):
+                request_plan("Inspect repository", directory)
+            self.assertEqual(urlopen.call_count, 2)
+
+    @patch("ario_planner.urllib.request.urlopen")
     def test_unresolved_template_plan_is_rejected(self, urlopen):
         with tempfile.TemporaryDirectory() as directory:
             template = self.valid_workflow()
