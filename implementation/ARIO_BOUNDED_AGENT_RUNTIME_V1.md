@@ -124,3 +124,25 @@ Example task fragment:
 ```
 
 Without `success_criteria`, legacy behavior remains unchanged and `COMPLETED` means only that every declared action returned success. With criteria, `COMPLETED` means all declared criteria passed exact file-content checks; this still does not establish unmodeled semantic properties or make the ledger tamper-proof. This is a deterministic goal contract, not an LLM planner and not unrestricted autonomy.
+
+## Bounded failure diagnostics
+
+A task may declare an optional `failure_diagnostics` list. If a normal action fails, the task remains `STOPPED`; Ario may then execute only the explicitly declared read-only diagnostic actions and records each result as a `FAILURE_DIAGNOSTIC_OBSERVED` event. Allowed diagnostic tools are `inspect_directory`, `read_text`, `file_fingerprint`, `inspect_backup`, `recovery_preflight`, `git_status`, `compile_python`, `run_tests`, and `verify_text`. Write and restore tools are rejected during preflight, before any task action or ledger append. Diagnostic failures are recorded but do not trigger retries or further corrective actions.
+
+Example:
+
+```json
+{
+  "task_id": "DIAGNOSE-FAILED-STEP-001",
+  "goal": "Read a known file and gather evidence if the read fails",
+  "actions": [
+    {"step_id": "read-target", "tool": "read_text", "path": "result.txt"}
+  ],
+  "failure_diagnostics": [
+    {"step_id": "inspect-parent", "tool": "inspect_directory", "path": "."},
+    {"step_id": "fingerprint-target", "tool": "file_fingerprint", "path": "result.txt"}
+  ]
+}
+```
+
+This adds a bounded observe-and-decide branch, not an automatic repair loop: failure diagnostics can explain state but cannot modify it or change the failed task to `COMPLETED`.
