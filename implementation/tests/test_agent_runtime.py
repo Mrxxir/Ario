@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ario_agent import AgentRequestError, inspect_task_history, parse_task, run_task
+from ario_agent import AgentRequestError, inspect_execution_lock, inspect_task_history, parse_task, run_task
 
 
 class BoundedAgentTests(unittest.TestCase):
@@ -26,6 +26,48 @@ class BoundedAgentTests(unittest.TestCase):
             result = run_task(task, root, root / "audit.jsonl")
             self.assertEqual(result["status"], "STOPPED")
             self.assertIn("workspace", result["steps"][0]["observation"]["error"])
+
+    def test_inspect_execution_lock_reports_valid_record_without_modifying_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            ledger = root / "audit.jsonl"
+            lock = root / "audit.jsonl.lock"
+            original = json.dumps({"pid": 123, "task_id": "TASK-LOCKED", "started_at": "2026-10-09T00:00:00+00:00"}).encode()
+            lock.write_bytes(original)
+
+            result = inspect_execution_lock(ledger)
+
+            self.assertEqual(result["status"], "LOCK_PRESENT")
+            self.assertEqual(result["lock_record"]["pid"], 123)
+            self.assertEqual(result["lock_record"]["task_id"], "TASK-LOCKED")
+            self.assertEqual(result["sha256"], hashlib.sha256(original).hexdigest())
+            self.assertFalse(result["write_performed"])
+            self.assertFalse(result["automatic_removal"])
+            self.assertEqual(lock.read_bytes(), original)
+
+    def test_inspect_execution_lock_reports_absent_lock_read_only(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = Path(directory) / "audit.jsonl"
+
+            result = inspect_execution_lock(ledger)
+
+            self.assertEqual(result["status"], "NO_LOCK")
+            self.assertFalse(result["write_performed"])
+            self.assertFalse(result["automatic_removal"])
+
+    def test_inspect_execution_lock_malformed_record_returns_unknown_without_modification(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = Path(directory) / "audit.jsonl"
+            lock = Path(str(ledger) + ".lock")
+            original = b"not-json"
+            lock.write_bytes(original)
+
+            result = inspect_execution_lock(ledger)
+
+            self.assertEqual(result["status"], "UNKNOWN")
+            self.assertFalse(result["write_performed"])
+            self.assertFalse(result["automatic_removal"])
+            self.assertEqual(lock.read_bytes(), original)
 
     def test_existing_execution_lock_blocks_task_without_modifying_target_or_ledger(self):
         with tempfile.TemporaryDirectory() as directory:
