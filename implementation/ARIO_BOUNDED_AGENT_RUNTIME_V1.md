@@ -28,6 +28,39 @@ python .\implementation\ario_agent.py --task "$env:TEMP\ario-task.json" --worksp
 
 The ledger is append-only JSONL. Keep it in a trusted directory and protect it with normal filesystem permissions.
 
+## Guarded multi-step workflow
+
+The runtime can combine a hash-preconditioned write, an exact postcondition, and a read-back in one task. The hash must be computed from the actual starting file at task creation time; do not guess or reuse a stale hash.
+
+```json
+{
+  "task_id": "GUARDED-CHANGE-001",
+  "goal": "Change one known text file and verify its declared result",
+  "actions": [
+    {
+      "step_id": "s1-replace",
+      "tool": "replace_text",
+      "path": "notes.txt",
+      "expected_sha256": "<64-character SHA-256 of the current file bytes>",
+      "content": "EXPECTED RESULT"
+    },
+    {
+      "step_id": "s2-postcondition",
+      "tool": "verify_text",
+      "path": "notes.txt",
+      "expected_text": "EXPECTED RESULT"
+    },
+    {
+      "step_id": "s3-readback",
+      "tool": "read_text",
+      "path": "notes.txt"
+    }
+  ]
+}
+```
+
+The placeholder hash is illustrative, not executable. If the precondition fails, the write is refused. If the postcondition fails, the task stops before read-back or any later action. The runtime does not automatically undo a completed write just because a later independent verification fails; use `restore_backup` as a separate guarded action after reviewing the failure. This limitation is intentional and must remain visible in the audit trail.
+
 ## Allowlisted tools
 
 - `inspect_directory`: list a directory (maximum 200 entries).
