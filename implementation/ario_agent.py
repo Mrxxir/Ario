@@ -27,7 +27,18 @@ def _inside(root: Path, relative: str) -> Path:
     candidate = Path(relative)
     if candidate.is_absolute():
         raise AgentRequestError("absolute paths are not permitted")
-    resolved = (root / candidate).resolve()
+    lexical = root / candidate
+    probe = root
+    for part in candidate.parts:
+        if part in ("", "."):
+            continue
+        if part == "..":
+            probe = probe / part
+            continue
+        probe = probe / part
+        if probe.is_symlink():
+            raise AgentRequestError("symbolic-link paths are not permitted")
+    resolved = lexical.resolve()
     try:
         resolved.relative_to(root)
     except ValueError as exc:
