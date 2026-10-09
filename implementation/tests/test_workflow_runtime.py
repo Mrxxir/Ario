@@ -153,6 +153,25 @@ class BoundedWorkflowTests(unittest.TestCase):
             self.assertEqual(target.read_text(encoding="utf-8"), "unchanged")
             self.assertEqual(len(ledger.read_text(encoding="utf-8").splitlines()), 1)
 
+    def test_used_task_id_in_later_stage_blocks_workflow_before_first_stage(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "evidence.txt"
+            target.write_text("unchanged", encoding="utf-8")
+            ledger = root / "events.jsonl"
+            ledger.write_text(json.dumps({"event": "TASK_FINISHED", "task_id": "TASK-ALREADY-USED", "status": "COMPLETED"}) + "\\n", encoding="utf-8")
+            payload = self.workflow([
+                self.stage("first", "TASK-NEW", [{"step_id": "read", "tool": "read_text", "path": "evidence.txt"}]),
+                self.stage("second", "TASK-ALREADY-USED", [{"step_id": "read", "tool": "read_text", "path": "evidence.txt"}],
+                           {"stage_id": "first", "status": "COMPLETED"}),
+            ])
+
+            with self.assertRaisesRegex(AgentRequestError, "refusing duplicate execution"):
+                run_workflow(payload, root, ledger)
+            events = [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
+            self.assertEqual(len(events), 1)
+            self.assertEqual(target.read_text(encoding="utf-8"), "unchanged")
+
     def test_invalid_branch_path_is_rejected_before_any_ledger_write(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
