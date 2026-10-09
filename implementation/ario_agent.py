@@ -53,7 +53,7 @@ def parse_task(payload: Any) -> dict:
     allowed_fields = required_fields | {"success_criteria", "failure_diagnostics"}
     if not required_fields <= set(payload) or set(payload) - allowed_fields:
         raise AgentRequestError(
-            "task must contain task_id, goal, actions, and optional success_criteria/failure_diagnostics only"
+            "task must contain exactly task_id, goal, actions, and optional success_criteria/failure_diagnostics only"
         )
     if not isinstance(payload["task_id"], str) or not payload["task_id"].strip():
         raise AgentRequestError("task_id must be a non-empty string")
