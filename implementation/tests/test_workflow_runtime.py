@@ -159,7 +159,7 @@ class BoundedWorkflowTests(unittest.TestCase):
             target = root / "evidence.txt"
             target.write_text("unchanged", encoding="utf-8")
             ledger = root / "events.jsonl"
-            ledger.write_text(json.dumps({"event": "TASK_FINISHED", "task_id": "TASK-ALREADY-USED", "status": "COMPLETED"}) + "\\n", encoding="utf-8")
+            ledger.write_text(json.dumps({"event": "TASK_FINISHED", "task_id": "TASK-ALREADY-USED", "status": "COMPLETED"}) + "\n", encoding="utf-8")
             payload = self.workflow([
                 self.stage("first", "TASK-NEW", [{"step_id": "read", "tool": "read_text", "path": "evidence.txt"}]),
                 self.stage("second", "TASK-ALREADY-USED", [{"step_id": "read", "tool": "read_text", "path": "evidence.txt"}],
