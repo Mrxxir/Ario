@@ -53,25 +53,28 @@ The broader Cross-IRG invariants remain architectural requirements, but this F15
 
 Add a distinct `CompositionRequest` input object. It must not be represented as `Evidence` or `Assessment`.
 
+Define `CompositionInputBinding` as a typed wrapper with at least `source_irg_id`, `audit_result`, and `declared_scope`. The binding identifies what the caller says each result represents; it does not prove the declaration correct.
+
 Minimum fields:
 
 - `composition_id`: unique identifier for this request;
-- `input_audit_results`: tuple of actual typed `AuditResult` objects, not caller-provided IDs alone;
+- `input_bindings`: tuple of typed `CompositionInputBinding` objects, each pairing a declared source IRG label with an actual typed `AuditResult` object and the caller-declared scope for that result;
+- `requested_input_scope`: either `SUPPLIED_RESULTS_ONLY` or `ALL_FIVE_IRGS`;
 - `composition_rule_id`;
 - `composition_rule_version`;
 - `requested_output_semantics`;
 - `scope`;
 - `limitations`.
 
-The request's input results remain typed `AuditResult` artifacts. Their `verdict`, rule versions, configuration, audit IDs, and existing `artifacts_examined` remain result metadata. They are not re-cast as observations or evidence.
+The request's input results remain typed `AuditResult` artifacts. Their `verdict`, rule versions, configuration, audit IDs, and existing `artifacts_examined` remain result metadata. They are not re-cast as observations or evidence. The binding's source IRG label and declared scope are caller-supplied assertions because the current `AuditResult` schema has no typed IRG identifier or explicit local scope field. V1 may report those declarations but must not treat them as independently verified facts.
 
-The audit invocation must declare `M0-F15-1.0` in its `rule_versions` before the specialized F15 classification is emitted. Missing or unsupported rule/version declarations must not produce a positive composition result.
+The audit invocation must declare `M0-F15-1.0` in its `rule_versions` before the specialized F15 classification is emitted. The firewall version is distinct from the bounded-summary rule identifier/version. Missing or unsupported rule/version declarations must not produce a positive composition result.
 
 ## 5. Requested output semantics
 
 V1 supports only these exact, machine-readable semantic labels:
 
-- `LOCAL_RESULT_SUMMARY`: a bounded statement about the supplied audit-result records themselves, such as the count of supplied records whose local verdict equals `PASS`. This says nothing by itself about the truth of the underlying claims.
+- `LOCAL_RESULT_SUMMARY`: a bounded statement about the supplied audit-result records themselves, such as the count of supplied records whose local verdict equals `PASS`. This says nothing by itself about the truth of the underlying claims. Its only supported rule is `composition_rule_id = M0-F15-LOCAL-SUMMARY` with `composition_rule_version = 1.0`; its scope is limited to the actual supplied records unless all-five coverage is explicitly requested and structurally present.
 - `CLAIM_TRUTH`: a request to conclude that a Claim is true from local audit results.
 - `UNKNOWN`: a requested output semantic that the implementation cannot classify under this v1 contract.
 
@@ -89,7 +92,7 @@ Other semantics—including `SAME_ENTITY`, `CONSCIOUSNESS`, confidence, ranking,
 
 **F15-I4 — Bounded summary is not truth.** A supported `LOCAL_RESULT_SUMMARY` may summarize the supplied records only. It must not upgrade the truth status, evidentiary independence, semantic scope, continuity, or ontology of their underlying claims.
 
-**F15-I5 — Explicit unknowns.** Missing inputs, unsupported rule versions, duplicate audit IDs, a composition ID that collides with an input audit ID, or unrecognized output semantics must not yield a positive composition result. Ambiguous identity or rule resolution remains `UNKNOWN`; a direct prohibited truth request under the declared rule yields `COMPOSITION_FORBIDDEN`.
+**F15-I5 — Explicit unknowns.** Missing inputs, unsupported rule versions, duplicate audit IDs, duplicate declared IRG labels, a composition ID that collides with an input audit ID, or unrecognized output semantics must not yield a positive composition result. If `ALL_FIVE_IRGS` is requested, the declared input labels must contain exactly one each of `IRG-01` through `IRG-05`; otherwise the scope is incomplete or ambiguous and remains `UNKNOWN`. Ambiguous identity or rule resolution remains `UNKNOWN`; a direct prohibited truth request under the declared rule yields `COMPOSITION_FORBIDDEN`.
 
 **F15-I6 — No evidence cast.** A composition request or its resulting audit verdict is not admissible assessment evidence merely because it has an identifier. It remains a distinct artifact category.
 
@@ -114,7 +117,8 @@ The F15 result must preserve the distinction between the firewall's local struct
 | F15-E | Composition rule ID/version is unsupported or F15 is not declared in the audit invocation's `rule_versions` | `UNKNOWN`, not a positive composition result |
 | F15-F | Duplicate input `audit_id` values | `UNKNOWN`; do not count duplicate references as distinct local results |
 | F15-G | `composition_id` equals an input `audit_id` | `UNKNOWN` or explicit self-validation-cycle rejection; never authorize itself |
-| F15-H | Only a subset of local results is supplied but the request claims to represent all five IRGs | `UNKNOWN` or scope-mismatch rejection; no silent completeness inference |
+| F15-H | Only a subset of local results is supplied but `requested_input_scope = ALL_FIVE_IRGS` | `UNKNOWN` or scope-mismatch rejection; no silent completeness inference |
+| F15-K | A bounded summary uses an unsupported composition rule ID/version | `UNKNOWN`; explicit versioning alone does not self-authorize a rule |
 | F15-I | A result is separately recorded but not used as a truth mapping | Recording alone is not a composition violation and must not establish truth |
 | F15-J | A bounded summary's result is referenced later as assessment evidence | Reject as inadmissible/wrong-kind; summary result is not evidence |
 
