@@ -845,7 +845,10 @@ def test_f11_f_separately_recorded_audit_result_is_not_itself_a_violation():
     r = _run_f11("F11-F", AuditInput(prior_audit_results=(result,)))
 
     assert "COMPOSITION_FORBIDDEN" not in r.violations
-    assert r.verdict == "PASS"
+    # Recording a result is permitted, but the result alone cannot make a
+    # fresh audit PASS when no primary artifacts were supplied.
+    assert r.verdict == "UNKNOWN"
+    assert "prior audit results alone do not support a new verdict" in r.verdict_basis
     assert any(
         item.reference_id == "AUDIT-F11-F"
         and item.reference_type == "AUDIT_RESULT"
