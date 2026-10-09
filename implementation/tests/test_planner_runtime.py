@@ -90,6 +90,37 @@ class LocalOllamaPlannerTests(unittest.TestCase):
             self.assertEqual(urlopen.call_args.kwargs["timeout"], 300)
 
     @patch("ario_planner.urllib.request.urlopen")
+    def test_duplicate_model_task_and_step_ids_are_normalized_locally(self, urlopen):
+        with tempfile.TemporaryDirectory() as directory:
+            proposed = self.valid_workflow()
+            second = json.loads(json.dumps(proposed["stages"][0]))
+            second["stage_id"] = "review"
+            second["task"]["goal"] = "Review bounded implementation evidence"
+            second["task"]["task_id"] = proposed["stages"][0]["task"]["task_id"]
+            second["task"]["actions"][0]["step_id"] = proposed["stages"][0]["task"]["actions"][0]["step_id"]
+            second["when"] = {"stage_id": "inspect", "status": "COMPLETED"}
+            proposed["stages"].append(second)
+            urlopen.return_value = ollama_response(proposed)
+            plan = request_plan("Inspect repository", directory)
+            self.assertEqual([stage["stage_id"] for stage in plan["stages"]], ["inspect", "review"])
+            self.assertEqual(plan["stages"][1]["when"]["stage_id"], "inspect")
+            task_ids = [stage["task"]["task_id"] for stage in plan["stages"]]
+            self.assertEqual(len(task_ids), len(set(task_ids)))
+            step_ids = [stage["task"]["actions"][0]["step_id"] for stage in plan["stages"]]
+            self.assertEqual(len(step_ids), len(set(step_ids)))
+
+    @patch("ario_planner.urllib.request.urlopen")
+    def test_ambiguous_duplicate_stage_ids_fail_closed(self, urlopen):
+        with tempfile.TemporaryDirectory() as directory:
+            proposed = self.valid_workflow()
+            second = json.loads(json.dumps(proposed["stages"][0]))
+            proposed["stages"].append(second)
+            urlopen.return_value = ollama_response(proposed)
+            with self.assertRaisesRegex(AgentRequestError, "stage_id values are ambiguous"):
+                request_plan("Inspect repository", directory)
+            self.assertEqual(urlopen.call_count, 1)
+
+    @patch("ario_planner.urllib.request.urlopen")
     def test_schema_error_gets_one_correction_attempt(self, urlopen):
         with tempfile.TemporaryDirectory() as directory:
             invalid = self.valid_workflow()
