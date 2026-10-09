@@ -4,7 +4,7 @@
 
 \`ario_planner.py\` connects a locally running Ollama model to Ario's bounded workflow runtime. It collects a bounded read-only workspace inventory and Git status, asks the local model for a declarative workflow, validates the response against \`ario_workflow.py\`, validates relative paths, and assigns runtime task IDs locally.
 
-The planner does not send workspace file contents as part of its initial inventory. The model can request bounded \`read_text\` steps in its proposed workflow; those steps only run if execution is explicitly requested.
+The planner does not read arbitrary workspace files. In addition to the metadata inventory, it reads small excerpts from a fixed allowlist of implementation modules and regression tests (at most four files, 4,000 bytes per file, and 12,000 characters total) and sends those excerpts to the local Ollama model as untrusted planning context. It does not read user files, secrets, or arbitrary paths for this context. The model can request bounded \`read_text\` steps in its proposed workflow; those steps only run if execution is explicitly requested.
 
 ## Requirements
 
@@ -39,7 +39,7 @@ python .\implementation\ario_planner.py --goal "Inspect the Ario implementation 
 ## Boundaries
 
 - Only plain HTTP loopback Ollama endpoints are accepted; remote hosts and HTTPS endpoints are rejected.
-- The initial observation lists at most 250 workspace entries, omits common generated/dependency directories and symbolic links, and includes bounded Git status text. It does not read source file contents for the inventory.
+- The metadata inventory lists at most 250 workspace entries, omits common generated/dependency directories and symbolic links, and includes bounded Git status text. Separate planning context is restricted to the fixed allowlist and size limits above.
 - Ollama responses are capped at 1 MB. The goal is capped at 2,000 characters. The existing workflow limit is eight stages and each task is limited to eight actions.
 - Unknown fields, unsupported tools, invalid branch conditions, and workspace path escapes are rejected before execution.
 - Unresolved model template values (for example, `unique-id` or `short task goal`) are rejected; they cannot be reported as `PLAN_READY`.
