@@ -380,7 +380,7 @@ Ario's research publications are maintained separately from the software reposit
 See:
 
 * [`papers/`](./papers/)
-* Zenodo: DOI records will be added here as publication metadata is confirmed.
+* [Ario: Toward an Auditable Framework for Epistemic Integrity, Memory, and AI Identity — A Preliminary Design and Exploratory Evaluation Report](https://doi.org/10.5281/zenodo.23259916) — Zenodo, version 0.1 (preliminary report).
 
 The repository does not treat a publication as proof of the claims it discusses. Publications document research, arguments, methods, and results that remain open to evaluation and revision.
 
