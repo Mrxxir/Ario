@@ -826,12 +826,33 @@ def inspect_task_history(task_id: str, ledger_path: str | Path) -> dict:
         return {"task_id": task_id, "status": "UNKNOWN",
                 "error": "task_id was not found in the ledger",
                 "event_count": 0, "automatic_resume": False, "write_performed": False}
+    if events[0].get("event") != "TASK_STARTED":
+        return {"task_id": task_id, "status": "UNKNOWN",
+                "error": "task event precedes TASK_STARTED",
+                "event_count": len(events), "automatic_resume": False, "write_performed": False}
+    if finishes and events[-1].get("event") != "TASK_FINISHED":
+        return {"task_id": task_id, "status": "UNKNOWN",
+                "error": "task events appear after TASK_FINISHED",
+                "event_count": len(events), "automatic_resume": False, "write_performed": False}
     if finishes:
         final_status = finishes[0].get("status")
         if final_status not in {"COMPLETED", "STOPPED"}:
             return {"task_id": task_id, "status": "UNKNOWN",
                     "error": "unrecognized terminal status in ledger",
                     "event_count": len(events), "automatic_resume": False, "write_performed": False}
+        if final_status == "COMPLETED":
+            criteria = [
+                event for event in events
+                if event["event"] == "GOAL_CRITERION_OBSERVED"
+            ]
+            if any(event.get("status") != "SUCCEEDED" for event in steps):
+                return {"task_id": task_id, "status": "UNKNOWN",
+                        "error": "completed task has failed or unrecognized step observations",
+                        "event_count": len(events), "automatic_resume": False, "write_performed": False}
+            if any(event.get("status") != "PASSED" for event in criteria):
+                return {"task_id": task_id, "status": "UNKNOWN",
+                        "error": "completed task has failed or unrecognized goal criteria",
+                        "event_count": len(events), "automatic_resume": False, "write_performed": False}
         status = final_status
         next_state = "NONE_TERMINAL_TASK"
     else:

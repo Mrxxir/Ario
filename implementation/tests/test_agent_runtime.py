@@ -415,6 +415,49 @@ class BoundedAgentTests(unittest.TestCase):
             self.assertEqual(result["next_step_state"], "NONE_TERMINAL_TASK")
             self.assertFalse(result["automatic_resume"])
 
+    def test_history_inspection_rejects_contradictory_completion_and_event_order(self):
+        cases = {
+            "failed_step": [
+                {"event": "TASK_STARTED", "task_id": "X", "goal": "test"},
+                {"event": "STEP_OBSERVED", "task_id": "X", "step_id": "s1",
+                 "tool": "read_text", "status": "FAILED"},
+                {"event": "TASK_FINISHED", "task_id": "X", "status": "COMPLETED"},
+            ],
+            "failed_criterion": [
+                {"event": "TASK_STARTED", "task_id": "X", "goal": "test"},
+                {"event": "GOAL_CRITERION_OBSERVED", "task_id": "X",
+                 "criterion": "c1", "status": "FAILED"},
+                {"event": "TASK_FINISHED", "task_id": "X", "status": "COMPLETED"},
+            ],
+            "step_after_finish": [
+                {"event": "TASK_STARTED", "task_id": "X", "goal": "test"},
+                {"event": "TASK_FINISHED", "task_id": "X", "status": "COMPLETED"},
+                {"event": "STEP_OBSERVED", "task_id": "X", "step_id": "s1",
+                 "tool": "read_text", "status": "SUCCEEDED"},
+            ],
+            "event_before_start": [
+                {"event": "STEP_OBSERVED", "task_id": "X", "step_id": "s1",
+                 "tool": "read_text", "status": "SUCCEEDED"},
+                {"event": "TASK_STARTED", "task_id": "X", "goal": "test"},
+                {"event": "TASK_FINISHED", "task_id": "X", "status": "COMPLETED"},
+            ],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name, events in cases.items():
+                with self.subTest(case=name):
+                    ledger = root / f"{name}.jsonl"
+                    ledger.write_text(
+                        "\\n".join(json.dumps(event) for event in events) + "\\n",
+                        encoding="utf-8",
+                    )
+                    before = ledger.read_bytes()
+                    result = inspect_task_history("X", ledger)
+                    self.assertEqual(result["status"], "UNKNOWN")
+                    self.assertFalse(result["automatic_resume"])
+                    self.assertFalse(result["write_performed"])
+                    self.assertEqual(ledger.read_bytes(), before)
+
     def test_history_inspection_fails_closed_on_malformed_ledger(self):
         with tempfile.TemporaryDirectory() as directory:
             ledger = Path(directory) / "audit.jsonl"
