@@ -24,6 +24,8 @@ python .\implementation\ario_planner.py --goal "Inspect the Ario implementation 
 
 The command prints JSON with \`status: PLAN_READY\` and the validated workflow. It does not execute the workflow and does not append to the execution ledger.
 
+The Ollama request timeout defaults to 300 seconds. Use `--timeout 600` for slower local inference; accepted values are 1–1800 seconds.
+
 ## Explicit execution
 
 To ask the local model for a plan and immediately execute that exact in-memory plan through the bounded runtime:
