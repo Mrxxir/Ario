@@ -617,7 +617,10 @@ class BoundedAgentTests(unittest.TestCase):
             second = execute_action({
                 "tool": "read_text", "path": "large.txt",
                 "start_line": first["next_start_line"],
+                "expected_next_start_line": 301,
+                "expected_truncated": False,
             }, root)
+            self.assertTrue(second["ok"])
             self.assertFalse(second["truncated"])
             self.assertEqual(first["content"] + second["content"], expected)
             self.assertEqual(second["start_line"], first["next_start_line"])
@@ -631,6 +634,42 @@ class BoundedAgentTests(unittest.TestCase):
         with self.assertRaisesRegex(AgentRequestError, "only for read_text"):
             parse_task(self.task([{
                 "step_id": "s1", "tool": "inspect_directory", "path": ".", "start_line": 2
+            }]))
+
+    def test_read_text_rejects_changed_chunk_boundary(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "large.txt"
+            target.write_text("".join(f"{index:04d}:" + ("x" * 95) + "\n" for index in range(300)), encoding="utf-8", newline="")
+            first = execute_action({"tool": "read_text", "path": "large.txt"}, root)
+
+            mismatched = execute_action({
+                "tool": "read_text",
+                "path": "large.txt",
+                "start_line": 1,
+                "expected_next_start_line": first["next_start_line"] + 1,
+                "expected_truncated": True,
+            }, root)
+
+            self.assertFalse(mismatched["ok"])
+            self.assertIn("next_start_line", mismatched["error"])
+            self.assertTrue(mismatched["truncated"])
+
+    def test_read_text_chunk_expectations_require_valid_paired_fields(self):
+        with self.assertRaisesRegex(AgentRequestError, "positive integer"):
+            parse_task(self.task([{
+                "step_id": "s1", "tool": "read_text", "path": "notes.txt",
+                "expected_next_start_line": True, "expected_truncated": False,
+            }]))
+        with self.assertRaisesRegex(AgentRequestError, "both expected_next_start_line and expected_truncated"):
+            parse_task(self.task([{
+                "step_id": "s1", "tool": "read_text", "path": "notes.txt",
+                "expected_next_start_line": 2,
+            }]))
+        with self.assertRaisesRegex(AgentRequestError, "only for read_text"):
+            parse_task(self.task([{
+                "step_id": "s1", "tool": "git_status",
+                "expected_next_start_line": 2, "expected_truncated": False,
             }]))
 
     def test_read_text_rejects_single_line_exceeding_chunk_limit(self):

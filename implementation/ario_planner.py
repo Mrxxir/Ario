@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from ario_agent import AgentRequestError, _inside, execute_action
+from ario_agent import MAX_READ_BYTES, MAX_STEPS, AgentRequestError, _inside, execute_action
 from ario_workflow import parse_workflow, run_workflow
 
 
@@ -324,15 +324,69 @@ def _parse_recommendation(payload: Any, observation: dict) -> dict:
     }
 
 
-def _build_deterministic_workflow(goal: str, recommendation: dict) -> dict:
-    """Create the fixed one-stage, two-read workflow locally; the model cannot define actions."""
+def _read_action_chunks(root: Path, relative: str, step_prefix: str) -> list[dict]:
+    """Precompute bounded line chunks and their expected completion boundaries."""
+    candidate = root / relative
+    if candidate.is_symlink():
+        raise AgentRequestError(f"refusing symbolic link in planner source review: {relative}")
+    target = _inside(root, relative)
+    if not target.is_file():
+        raise AgentRequestError(f"planner source review requires an existing regular file: {relative}")
+
+    chunks: list[dict[str, Any]] = []
+    chunk_start_line = 1
+    next_line = 1
+    chunk_bytes = 0
+    with target.open("rb") as stream:
+        for raw_line in stream:
+            if len(raw_line) > MAX_READ_BYTES:
+                raise AgentRequestError(
+                    f"planner source review cannot chunk a line longer than {MAX_READ_BYTES} bytes: {relative}"
+                )
+            if chunk_bytes and chunk_bytes + len(raw_line) > MAX_READ_BYTES:
+                chunks.append({
+                    "start_line": chunk_start_line,
+                    "expected_next_start_line": next_line,
+                    "expected_truncated": True,
+                })
+                chunk_start_line = next_line
+                chunk_bytes = 0
+            chunk_bytes += len(raw_line)
+            next_line += 1
+
+    if not chunks or chunk_bytes:
+        chunks.append({
+            "start_line": chunk_start_line,
+            "expected_next_start_line": next_line,
+            "expected_truncated": False,
+        })
+
+    return [
+        {
+            "step_id": f"{step_prefix}-{index:02d}",
+            "tool": "read_text",
+            "path": relative,
+            **chunk,
+        }
+        for index, chunk in enumerate(chunks, start=1)
+    ]
+
+
+def _build_deterministic_workflow(goal: str, recommendation: dict, root: Path) -> dict:
+    """Create a deterministic, bounded full-file review; the model cannot define actions."""
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     implementation_path = recommendation["implementation_path"]
     test_path = recommendation["test_path"]
     task_goal = (
-        f"Read {implementation_path} and {test_path}; assess this bounded engineering question: "
+        f"Read all bounded chunks of {implementation_path} and {test_path}; assess this engineering question: "
         f"{recommendation['engineering_question']} Rationale: {recommendation['rationale']}"
     )
+    actions = _read_action_chunks(root, implementation_path, "step-read-implementation")
+    actions.extend(_read_action_chunks(root, test_path, "step-read-tests"))
+    if len(actions) > MAX_STEPS:
+        raise AgentRequestError(
+            f"complete source review requires {len(actions)} bounded reads, exceeding the {MAX_STEPS}-step task limit"
+        )
     workflow = {
         "workflow_id": f"WF-PLANNER-{stamp}",
         "goal": goal.strip(),
@@ -341,10 +395,7 @@ def _build_deterministic_workflow(goal: str, recommendation: dict) -> dict:
             "task": {
                 "task_id": f"TASK-PLANNER-{stamp}-01",
                 "goal": task_goal,
-                "actions": [
-                    {"step_id": "step-read-implementation", "tool": "read_text", "path": implementation_path},
-                    {"step_id": "step-read-tests", "tool": "read_text", "path": test_path},
-                ],
+                "actions": actions,
             },
         }],
     }
@@ -430,7 +481,7 @@ def request_plan(
             ])
     if recommendation is None:
         raise AgentRequestError("Ollama did not produce a valid recommendation")
-    workflow = parse_workflow(_build_deterministic_workflow(goal, recommendation))
+    workflow = parse_workflow(_build_deterministic_workflow(goal, recommendation, root))
     _reject_placeholder_values(workflow)
     _validate_paths(workflow, root)
     _validate_plan_quality(workflow, observation)

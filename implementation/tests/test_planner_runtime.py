@@ -211,6 +211,44 @@ class LocalOllamaPlannerTests(unittest.TestCase):
             self.assertEqual(urlopen.call_count, 2)
 
     @patch("ario_planner.urllib.request.urlopen")
+    def test_planner_builds_complete_bounded_chunks_for_large_source_files(self, urlopen):
+        with tempfile.TemporaryDirectory() as directory:
+            self._populate_planner_context(directory)
+            source = Path(directory) / "implementation/ario_planner.py"
+            source.write_text("".join(f"line-{index:04d} " + ("x" * 90) + "\n" for index in range(300)), encoding="utf-8", newline="")
+            urlopen.return_value = ollama_response(self.valid_recommendation())
+
+            plan = request_plan("Inspect repository", directory)
+
+            actions = plan["stages"][0]["task"]["actions"]
+            source_actions = [a for a in actions if a["path"] == "implementation/ario_planner.py"]
+            test_actions = [a for a in actions if a["path"] == "implementation/tests/test_planner_runtime.py"]
+            self.assertGreaterEqual(len(source_actions), 2)
+            self.assertEqual(len(test_actions), 1)
+            self.assertEqual(source_actions[0]["start_line"], 1)
+            self.assertTrue(source_actions[0]["expected_truncated"])
+            self.assertEqual(source_actions[0]["expected_next_start_line"], source_actions[1]["start_line"])
+            self.assertFalse(source_actions[-1]["expected_truncated"])
+            self.assertFalse(test_actions[0]["expected_truncated"])
+            self.assertLessEqual(len(actions), 8)
+
+            result = ario_planner.run_workflow(plan, directory, Path(directory) / "events.jsonl")
+            self.assertEqual(result["status"], "COMPLETED")
+            steps = result["stages"][0]["task_result"]["steps"]
+            for relative in (
+                "implementation/ario_planner.py",
+                "implementation/tests/test_planner_runtime.py",
+            ):
+                observed = "".join(
+                    step["observation"]["content"]
+                    for step in steps
+                    if step["observation"].get("path") == relative
+                )
+                expected = (Path(directory) / relative).read_text(encoding="utf-8")
+                self.assertEqual(observed, expected, relative)
+            self.assertTrue(all(step["status"] == "SUCCEEDED" for step in steps))
+
+    @patch("ario_planner.urllib.request.urlopen")
     def test_recommendation_schema_error_gets_one_correction_attempt(self, urlopen):
         with tempfile.TemporaryDirectory() as directory:
             self._populate_planner_context(directory)
