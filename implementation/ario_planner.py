@@ -346,6 +346,8 @@ def request_plan(
             workflow = parse_workflow(proposed)
             break
         except AgentRequestError as exc:
+            if "stage_id values are ambiguous" in str(exc):
+                raise
             if attempt == 1:
                 raise AgentRequestError(
                     f"Ollama workflow schema remained invalid after one correction attempt: {exc}"
