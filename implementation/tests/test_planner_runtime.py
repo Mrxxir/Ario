@@ -2,7 +2,18 @@ import io
 import json
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from co             self._populate_planner_context(directory)
+            self._populate_planner_context(directory)
+            self._populate_planner_context(directory)
+            self._populate_planner_context(directory)
+            self._populate_planner_context(directory)
+            self._populate_planner_context(directory)
+            self._populate_planner_context(directory)
+            self._populate_planner_context(directory)
+           self._populate_planner_context(directory)
+            self._populate_planner_context(directory)
+            self._populate_planner_context(directory)
+ntextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -33,6 +44,17 @@ class LocalOllamaPlannerTests(unittest.TestCase):
                 },
             }],
         }
+
+    def _populate_planner_context(self, directory):
+        for relative in (
+            "implementation/ario_planner.py",
+            "implementation/tests/test_planner_runtime.py",
+            "implementation/ario_workflow.py",
+            "implementation/tests/test_workflow_runtime.py",
+        ):
+            path = Path(directory) / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("# bounded test evidence", encoding="utf-8")
 
     def test_planner_prompt_requests_recommendation_not_workflow_structure(self):
         self.assertIn("not a workflow generator", ario_planner.SYSTEM_PROMPT)
