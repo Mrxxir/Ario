@@ -69,6 +69,17 @@ class LocalOllamaPlannerTests(unittest.TestCase):
             self.assertFalse(sent["stream"])
             self.assertEqual(urlopen.call_args.kwargs["timeout"], 300)
 
+    @patch("ario_planner.urllib.request.urlopen")
+    def test_unresolved_template_plan_is_rejected(self, urlopen):
+        with tempfile.TemporaryDirectory() as directory:
+            template = self.valid_workflow()
+            template["stages"][0]["stage_id"] = "unique-id"
+            template["stages"][0]["task"]["goal"] = "short task goal"
+            template["stages"][0]["task"]["actions"][0]["step_id"] = "unique-id"
+            urlopen.return_value = ollama_response(template)
+            with self.assertRaisesRegex(AgentRequestError, "unresolved template placeholder"):
+                request_plan("Inspect repository", directory)
+
     def test_timeout_must_be_within_supported_bounds(self):
         with tempfile.TemporaryDirectory() as directory:
             for timeout in (0, -1, 1801, True, "300"):

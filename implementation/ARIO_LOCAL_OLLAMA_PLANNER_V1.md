@@ -42,6 +42,7 @@ python .\implementation\ario_planner.py --goal "Inspect the Ario implementation 
 - The initial observation lists at most 250 workspace entries, omits common generated/dependency directories and symbolic links, and includes bounded Git status text. It does not read source file contents for the inventory.
 - Ollama responses are capped at 1 MB. The goal is capped at 2,000 characters. The existing workflow limit is eight stages and each task is limited to eight actions.
 - Unknown fields, unsupported tools, invalid branch conditions, and workspace path escapes are rejected before execution.
+- Unresolved model template values (for example, `unique-id` or `short task goal`) are rejected; they cannot be reported as `PLAN_READY`.
 - Task IDs and workflow IDs are assigned by the local runtime, not trusted from model output.
 - The model is instructed not to invent SHA-256 preconditions. A write that lacks a correct current hash fails closed; a planner response cannot bypass runtime validation.
 - The plan may still be wrong, incomplete, or semantically inadequate. Exact postconditions and the append-only application ledger provide bounded checks, not proof of general correctness or tamper-proof history.
