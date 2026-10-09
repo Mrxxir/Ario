@@ -123,6 +123,35 @@ class BoundedAgentTests(unittest.TestCase):
             self.assertEqual(result["status"], "STOPPED")
             self.assertEqual(target.read_text(encoding="utf-8"), "keep this")
 
+    def test_file_fingerprint_and_backup_inspection_are_read_only(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "workspace"
+            root.mkdir()
+            target = root / "result.txt"
+            target.write_bytes(b"current bytes")
+            ledger = Path(directory) / "state" / "events.jsonl"
+            backup = ledger.parent / "backups" / "fixture" / "result.txt"
+            backup.parent.mkdir(parents=True)
+            backup.write_bytes(b"saved version")
+
+            task = self.task([
+                {"step_id": "fingerprint", "tool": "file_fingerprint", "path": "result.txt"},
+                {"step_id": "backup", "tool": "inspect_backup", "path": "fixture/result.txt"},
+            ])
+            result = run_task(task, root, ledger)
+            self.assertEqual(result["status"], "COMPLETED")
+            self.assertEqual(
+                result["steps"][0]["observation"]["sha256"],
+                hashlib.sha256(b"current bytes").hexdigest(),
+            )
+            self.assertEqual(result["steps"][0]["observation"]["bytes"], len(b"current bytes"))
+            self.assertEqual(
+                result["steps"][1]["observation"]["sha256"],
+                hashlib.sha256(b"saved version").hexdigest(),
+            )
+            self.assertEqual(target.read_bytes(), b"current bytes")
+            self.assertEqual(backup.read_bytes(), b"saved version")
+
     def test_guarded_replace_then_verify_workflow_completes_and_records_all_steps(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "workspace"
