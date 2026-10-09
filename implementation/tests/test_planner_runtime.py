@@ -102,8 +102,8 @@ class LocalOllamaPlannerTests(unittest.TestCase):
             proposed["stages"].append(second)
             urlopen.return_value = ollama_response(proposed)
             plan = request_plan("Inspect repository", directory)
-            self.assertEqual([stage["stage_id"] for stage in plan["stages"]], ["stage-01", "stage-02"])
-            self.assertEqual(plan["stages"][1]["when"]["stage_id"], "stage-01")
+            self.assertEqual([stage["stage_id"] for stage in plan["stages"]], ["inspect", "review"])
+            self.assertEqual(plan["stages"][1]["when"]["stage_id"], "inspect")
             task_ids = [stage["task"]["task_id"] for stage in plan["stages"]]
             self.assertEqual(len(task_ids), len(set(task_ids)))
             step_ids = [stage["task"]["actions"][0]["step_id"] for stage in plan["stages"]]
