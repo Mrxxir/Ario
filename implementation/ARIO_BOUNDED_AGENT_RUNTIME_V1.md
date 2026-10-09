@@ -82,6 +82,7 @@ There is no arbitrary shell, arbitrary command, network, delete-file, or privile
 - Each step produces an observation recorded to the JSONL ledger.
 - A failed step stops the task; no automatic retry or corrective write is attempted.
 - Recovery preflight can use `file_fingerprint` to obtain the target's current hash and `inspect_backup` to confirm the candidate backup's hash. A subsequent `restore_backup` task must explicitly supply the observed current hash; inspection never triggers a write or chooses a backup automatically.
+- `recovery_preflight` combines target and selected-backup fingerprinting into one read-only, ledger-recorded step. It records both SHA-256 hashes, byte counts, and whether the bytes are identical. `DIFFERENT_CONTENT` is evidence of difference, not evidence that either version is correct. The tool never selects a backup, restores, retries, or writes; a separate task must explicitly request `restore_backup` with the observed current-target hash.
 - `COMPLETED` means all declared steps returned success. It does **not** prove the natural-language goal was semantically achieved.
 - The event ledger is an audit aid, not tamper-proof storage. A local administrator can modify it; cryptographic integrity, OS-level isolation, approvals for writes, and independent goal verification remain future work.
 - Rollback is itself a guarded write, not magic undo: it requires a known backup-relative path and the exact current-file hash, and preserves the replaced current version before restoration.
