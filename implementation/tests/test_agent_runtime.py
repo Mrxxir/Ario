@@ -123,6 +123,48 @@ class BoundedAgentTests(unittest.TestCase):
             self.assertEqual(result["status"], "STOPPED")
             self.assertEqual(target.read_text(encoding="utf-8"), "keep this")
 
+    def test_guarded_replace_then_verify_workflow_completes_and_records_all_steps(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "workspace"
+            root.mkdir()
+            target = root / "result.txt"
+            target.write_text("before", encoding="utf-8")
+            before_hash = hashlib.sha256(b"before").hexdigest()
+            ledger = Path(directory) / "state" / "events.jsonl"
+            task = self.task([
+                {"step_id": "replace", "tool": "replace_text", "path": "result.txt",
+                 "content": "expected result", "expected_sha256": before_hash},
+                {"step_id": "verify", "tool": "verify_text", "path": "result.txt",
+                 "expected_text": "expected result"},
+                {"step_id": "readback", "tool": "read_text", "path": "result.txt"},
+            ])
+            result = run_task(task, root, ledger)
+            self.assertEqual(result["status"], "COMPLETED")
+            self.assertEqual([s["status"] for s in result["steps"]],
+                             ["SUCCEEDED", "SUCCEEDED", "SUCCEEDED"])
+            self.assertTrue(result["steps"][1]["observation"]["matches"])
+            self.assertEqual(result["steps"][2]["observation"]["content"], "expected result")
+
+    def test_guarded_workflow_stops_after_failed_postcondition(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "workspace"
+            root.mkdir()
+            target = root / "result.txt"
+            target.write_text("before", encoding="utf-8")
+            before_hash = hashlib.sha256(b"before").hexdigest()
+            task = self.task([
+                {"step_id": "replace", "tool": "replace_text", "path": "result.txt",
+                 "content": "new value", "expected_sha256": before_hash},
+                {"step_id": "verify", "tool": "verify_text", "path": "result.txt",
+                 "expected_text": "wrong value"},
+                {"step_id": "readback", "tool": "read_text", "path": "result.txt"},
+            ])
+            result = run_task(task, root, Path(directory) / "state" / "events.jsonl")
+            self.assertEqual(result["status"], "STOPPED")
+            self.assertEqual([s["status"] for s in result["steps"]], ["SUCCEEDED", "FAILED"])
+            self.assertEqual(len(result["steps"]), 2)
+            self.assertEqual(target.read_text(encoding="utf-8"), "new value")
+
     def test_verify_text_passes_only_when_postcondition_matches(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
