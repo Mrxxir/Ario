@@ -11,10 +11,10 @@ import ario_planner
 from ario_planner import _local_ollama_endpoint, _validate_plan_quality, build_observation, request_plan
 
 
-def ollama_response(workflow):
+def ollama_response(payload):
     response = MagicMock()
     response.__enter__.return_value.read.return_value = json.dumps({
-        "message": {"content": json.dumps(workflow)}
+        "message": {"content": json.dumps(payload)}
     }).encode("utf-8")
     return response
 
@@ -22,23 +22,44 @@ def ollama_response(workflow):
 class LocalOllamaPlannerTests(unittest.TestCase):
     def valid_workflow(self):
         return {
-            "workflow_id": "MODEL-CHOSEN-ID",
-            "goal": "model goal",
+            "workflow_id": "WF-TEST",
+            "goal": "Inspect workspace",
             "stages": [{
-                "stage_id": "inspect",
+                "stage_id": "stage-source-review",
                 "task": {
-                    "task_id": "TASK-MODEL-ID",
-                    "goal": "Inspect workspace",
-                    "actions": [{"step_id": "list", "tool": "inspect_directory", "path": "."}],
+                    "task_id": "TASK-TEST",
+                    "goal": "Read source and tests",
+                    "actions": [
+                        {"step_id": "step-source", "tool": "read_text", "path": "implementation/ario_planner.py"},
+                        {"step_id": "step-tests", "tool": "read_text", "path": "implementation/tests/test_planner_runtime.py"},
+                    ],
                 },
             }],
         }
 
-    def test_planner_prompt_requires_distinct_source_and_test_evidence(self):
-        self.assertIn("exactly TWO actions", ario_planner.SYSTEM_PROMPT)
-        self.assertIn('"tool": "read_text"', ario_planner.SYSTEM_PROMPT)
-        self.assertIn("Do not use inspect_directory", ario_planner.SYSTEM_PROMPT)
-        self.assertIn("concrete bounded engineering question", ario_planner.SYSTEM_PROMPT)
+    def valid_recommendation(self):
+        return {
+            "implementation_path": "implementation/ario_planner.py",
+            "test_path": "implementation/tests/test_planner_runtime.py",
+            "engineering_question": "Which missing edge-case test would improve fail-closed planner validation?",
+            "rationale": "The planner normalizes identifiers and validates model recommendations before constructing a workflow.",
+        }
+
+    def _populate_planner_context(self, directory):
+        for relative in (
+            "implementation/ario_planner.py",
+            "implementation/tests/test_planner_runtime.py",
+            "implementation/ario_workflow.py",
+            "implementation/tests/test_workflow_runtime.py",
+        ):
+            path = Path(directory) / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("# bounded test evidence", encoding="utf-8")
+
+    def test_planner_prompt_requests_recommendation_not_workflow_structure(self):
+        self.assertIn("not a workflow generator", ario_planner.SYSTEM_PROMPT)
+        self.assertIn('"engineering_question"', ario_planner.SYSTEM_PROMPT)
+        self.assertIn("Do not propose workflow stages", ario_planner.SYSTEM_PROMPT)
 
     def test_planning_context_prioritizes_planner_and_its_tests(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -54,15 +75,12 @@ class LocalOllamaPlannerTests(unittest.TestCase):
             for relative in paths:
                 path = root / relative
                 path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(f"# evidence from {relative}\\n", encoding="utf-8")
+                path.write_text(f"# evidence from {relative}\n", encoding="utf-8")
             context = build_observation(root)["planning_context"]
             self.assertEqual([item["path"] for item in context], list(paths[:4]))
 
     def test_endpoint_accepts_loopback_and_rejects_remote_hosts(self):
-        self.assertEqual(
-            _local_ollama_endpoint("http://127.0.0.1:11434"),
-            "http://127.0.0.1:11434/api/chat",
-        )
+        self.assertEqual(_local_ollama_endpoint("http://127.0.0.1:11434"), "http://127.0.0.1:11434/api/chat")
         with self.assertRaisesRegex(AgentRequestError, "loopback"):
             _local_ollama_endpoint("http://example.com:11434")
         with self.assertRaisesRegex(AgentRequestError, "loopback"):
@@ -82,29 +100,35 @@ class LocalOllamaPlannerTests(unittest.TestCase):
             root = Path(directory)
             implementation = root / "implementation"
             implementation.mkdir()
-            (implementation / "ario_agent.py").write_text(
-                "def safe_runtime():\\n    return 'bounded-source-evidence'\\n",
-                encoding="utf-8",
-            )
+            (implementation / "ario_agent.py").write_text("def safe_runtime():\n    return 'bounded-source-evidence'\n", encoding="utf-8")
             (root / "private.txt").write_text("DO NOT SEND THIS SECRET", encoding="utf-8")
             observation = build_observation(root)
             context = observation["planning_context"]
             self.assertEqual([item["path"] for item in context], ["implementation/ario_agent.py"])
             self.assertIn("bounded-source-evidence", context[0]["content"])
             self.assertNotIn("DO NOT SEND THIS SECRET", json.dumps(observation))
-            self.assertLessEqual(
-                sum(len(item["content"]) for item in context),
-                ario_planner.MAX_CONTEXT_TOTAL_CHARS,
-            )
+            self.assertLessEqual(sum(len(item["content"]) for item in context), ario_planner.MAX_CONTEXT_TOTAL_CHARS)
 
     @patch("ario_planner.urllib.request.urlopen")
-    def test_valid_plan_is_schema_checked_and_runtime_ids_are_local(self, urlopen):
+    def test_valid_recommendation_builds_deterministic_workflow(self, urlopen):
         with tempfile.TemporaryDirectory() as directory:
-            urlopen.return_value = ollama_response(self.valid_workflow())
+            self._populate_planner_context(directory)
+            urlopen.return_value = ollama_response(self.valid_recommendation())
             plan = request_plan("Inspect this repository", directory)
             self.assertEqual(plan["goal"], "Inspect this repository")
             self.assertTrue(plan["workflow_id"].startswith("WF-PLANNER-"))
-            self.assertNotEqual(plan["stages"][0]["task"]["task_id"], "TASK-MODEL-ID")
+            self.assertEqual(len(plan["stages"]), 1)
+            stage = plan["stages"][0]
+            self.assertEqual(stage["stage_id"], "stage-source-review")
+            self.assertTrue(stage["task"]["task_id"].startswith("TASK-PLANNER-"))
+            self.assertEqual(
+                [(a["tool"], a["path"]) for a in stage["task"]["actions"]],
+                [
+                    ("read_text", "implementation/ario_planner.py"),
+                    ("read_text", "implementation/tests/test_planner_runtime.py"),
+                ],
+            )
+            self.assertEqual(len({a["step_id"] for a in stage["task"]["actions"]}), 2)
             request = urlopen.call_args.args[0]
             self.assertEqual(request.full_url, "http://127.0.0.1:11434/api/chat")
             sent = json.loads(request.data.decode("utf-8"))
@@ -114,132 +138,121 @@ class LocalOllamaPlannerTests(unittest.TestCase):
             self.assertEqual(urlopen.call_args.kwargs["timeout"], 300)
 
     @patch("ario_planner.urllib.request.urlopen")
-    def test_duplicate_model_task_and_step_ids_are_normalized_locally(self, urlopen):
+    def test_model_cannot_inject_duplicate_stage_ids_or_workflow_actions(self, urlopen):
         with tempfile.TemporaryDirectory() as directory:
-            proposed = self.valid_workflow()
-            second = json.loads(json.dumps(proposed["stages"][0]))
-            second["stage_id"] = "review"
-            second["task"]["goal"] = "Review bounded implementation evidence"
-            second["task"]["task_id"] = proposed["stages"][0]["task"]["task_id"]
-            second["task"]["actions"][0]["step_id"] = proposed["stages"][0]["task"]["actions"][0]["step_id"]
-            second["task"]["actions"][0]["path"] = "notes.txt"
-            second["when"] = {"stage_id": "inspect", "status": "COMPLETED"}
-            proposed["stages"].append(second)
-            urlopen.return_value = ollama_response(proposed)
+            self._populate_planner_context(directory)
+            old_style = {
+                "workflow_id": "model-workflow",
+                "goal": "model goal",
+                "stages": [{"stage_id": "same", "task": {}}, {"stage_id": "same", "task": {}}],
+            }
+            urlopen.side_effect = [ollama_response(old_style), ollama_response(self.valid_recommendation())]
             plan = request_plan("Inspect repository", directory)
-            self.assertEqual([stage["stage_id"] for stage in plan["stages"]], ["inspect", "review"])
-            self.assertEqual(plan["stages"][1]["when"]["stage_id"], "inspect")
-            task_ids = [stage["task"]["task_id"] for stage in plan["stages"]]
-            self.assertEqual(len(task_ids), len(set(task_ids)))
-            step_ids = [stage["task"]["actions"][0]["step_id"] for stage in plan["stages"]]
-            self.assertEqual(len(step_ids), len(set(step_ids)))
+            self.assertEqual(urlopen.call_count, 2)
+            self.assertEqual(len(plan["stages"]), 1)
+            self.assertEqual(plan["stages"][0]["stage_id"], "stage-source-review")
+            self.assertEqual(len(plan["stages"][0]["task"]["actions"]), 2)
+            correction = json.loads(urlopen.call_args_list[1].args[0].data.decode("utf-8"))
+            self.assertIn("Do not return stages, actions, IDs", correction["messages"][-1]["content"])
 
     @patch("ario_planner.urllib.request.urlopen")
-    def test_ambiguous_duplicate_stage_ids_fail_closed(self, urlopen):
+    def test_duplicate_stage_ids_are_not_part_of_recommendation_schema(self, urlopen):
         with tempfile.TemporaryDirectory() as directory:
-            proposed = self.valid_workflow()
-            second = json.loads(json.dumps(proposed["stages"][0]))
-            proposed["stages"].append(second)
-            urlopen.return_value = ollama_response(proposed)
-            with self.assertRaisesRegex(AgentRequestError, "stage_id values are ambiguous"):
+            self._populate_planner_context(directory)
+            invalid = self.valid_recommendation()
+            invalid["stages"] = [{"stage_id": "same"}, {"stage_id": "same"}]
+            urlopen.return_value = ollama_response(invalid)
+            with self.assertRaisesRegex(AgentRequestError, "recommendation remained invalid"):
                 request_plan("Inspect repository", directory)
-            self.assertEqual(urlopen.call_count, 1)
+            self.assertEqual(urlopen.call_count, 2)
 
     @patch("ario_planner.urllib.request.urlopen")
-    def test_schema_error_gets_one_correction_attempt(self, urlopen):
+    def test_recommendation_schema_error_gets_one_correction_attempt(self, urlopen):
         with tempfile.TemporaryDirectory() as directory:
-            invalid = self.valid_workflow()
-            invalid["unexpected"] = "model echoed unrelated context"
-            urlopen.side_effect = [ollama_response(invalid), ollama_response(self.valid_workflow())]
+            self._populate_planner_context(directory)
+            urlopen.side_effect = [ollama_response({"unexpected": "extra"}), ollama_response(self.valid_recommendation())]
             plan = request_plan("Inspect repository", directory)
             self.assertEqual(len(plan["stages"]), 1)
             self.assertEqual(urlopen.call_count, 2)
-            second_request = json.loads(urlopen.call_args_list[1].args[0].data.decode("utf-8"))
-            correction = second_request["messages"][-1]["content"]
-            self.assertIn("exactly these top-level keys", correction)
-            self.assertIn("planning_context", correction)
+            correction = json.loads(urlopen.call_args_list[1].args[0].data.decode("utf-8"))["messages"][-1]["content"]
+            self.assertIn("implementation_path, test_path, engineering_question, rationale", correction)
+            self.assertIn("Do not return stages, actions, IDs", correction)
 
     @patch("ario_planner.urllib.request.urlopen")
-    def test_first_stage_condition_gets_explicit_correction_guidance(self, urlopen):
+    def test_model_conditions_are_rejected_and_never_enter_workflow(self, urlopen):
         with tempfile.TemporaryDirectory() as directory:
-            invalid = self.valid_workflow()
-            invalid["stages"][0]["when"] = {"stage_id": "inspect", "status": "COMPLETED"}
-            corrected = self.valid_workflow()
-            urlopen.side_effect = [ollama_response(invalid), ollama_response(corrected)]
+            self._populate_planner_context(directory)
+            invalid = self.valid_recommendation()
+            invalid["when"] = {"stage_id": "self", "status": "COMPLETED"}
+            urlopen.side_effect = [ollama_response(invalid), ollama_response(self.valid_recommendation())]
             plan = request_plan("Inspect repository", directory)
-            self.assertEqual(len(plan["stages"]), 1)
             self.assertNotIn("when", plan["stages"][0])
             self.assertEqual(urlopen.call_count, 2)
-            second_request = json.loads(urlopen.call_args_list[1].args[0].data.decode("utf-8"))
-            correction = second_request["messages"][-1]["content"]
-            self.assertIn("first stage MUST omit the when field", correction)
-            self.assertIn("stage_id earlier in the stages list", correction)
 
     @patch("ario_planner.urllib.request.urlopen")
-    def test_schema_error_stops_after_one_correction_attempt(self, urlopen):
+    def test_recommendation_stops_after_one_correction_attempt(self, urlopen):
         with tempfile.TemporaryDirectory() as directory:
-            invalid = self.valid_workflow()
-            invalid["unexpected"] = "extra"
+            self._populate_planner_context(directory)
+            invalid = {"unexpected": "extra"}
             urlopen.side_effect = [ollama_response(invalid), ollama_response(invalid)]
-            with self.assertRaisesRegex(AgentRequestError, "remained invalid after one correction attempt"):
+            with self.assertRaisesRegex(AgentRequestError, "recommendation remained invalid"):
                 request_plan("Inspect repository", directory)
             self.assertEqual(urlopen.call_count, 2)
 
     @patch("ario_planner.urllib.request.urlopen")
-    def test_unresolved_template_plan_is_rejected(self, urlopen):
+    def test_unresolved_template_recommendation_is_rejected(self, urlopen):
         with tempfile.TemporaryDirectory() as directory:
-            template = self.valid_workflow()
-            template["stages"][0]["stage_id"] = "unique-id"
-            template["stages"][0]["task"]["goal"] = "short task goal"
-            template["stages"][0]["task"]["actions"][0]["step_id"] = "unique-id"
-            urlopen.return_value = ollama_response(template)
-            with self.assertRaisesRegex(AgentRequestError, "unresolved template placeholder"):
+            self._populate_planner_context(directory)
+            template = self.valid_recommendation()
+            template["engineering_question"] = "placeholder"
+            urlopen.side_effect = [ollama_response(template), ollama_response(template)]
+            with self.assertRaisesRegex(AgentRequestError, "recommendation remained invalid"):
                 request_plan("Inspect repository", directory)
 
     def test_plan_quality_rejects_directory_only_plan_when_source_context_exists(self):
-        workflow = self.valid_workflow()
+        workflow = {
+            "stages": [{"task": {"actions": [{"tool": "inspect_directory", "path": "."}]}}]
+        }
         observation = {"planning_context": [{"path": "implementation/ario_agent.py", "content": "def example(): pass"}]}
         with self.assertRaisesRegex(AgentRequestError, "only lists directories"):
             _validate_plan_quality(workflow, observation)
 
     def test_plan_quality_rejects_repeated_action_across_stages(self):
-        workflow = self.valid_workflow()
-        second = json.loads(json.dumps(workflow["stages"][0]))
-        second["stage_id"] = "review"
-        second["task"]["task_id"] = "TASK-SECOND"
-        second["task"]["actions"][0]["step_id"] = "different-step-id"
-        second["task"]["actions"][0]["tool"] = "read_text"
-        second["task"]["actions"][0]["path"] = "implementation/ario_agent.py"
-        workflow["stages"][0]["task"]["actions"][0] = {
-            "step_id": "step-one", "tool": "read_text", "path": "implementation/ario_agent.py"
-        }
-        workflow["stages"].append(second)
+        action = {"step_id": "step", "tool": "read_text", "path": "implementation/ario_agent.py"}
+        workflow = {"stages": [
+            {"task": {"actions": [action]}},
+            {"task": {"actions": [{**action, "step_id": "different"}]}},
+        ]}
         with self.assertRaisesRegex(AgentRequestError, "duplicates an action"):
             _validate_plan_quality(workflow, {"planning_context": []})
 
-    def test_timeout_must_be_within_supported_bounds(self):
+    @patch("ario_planner.urllib.request.urlopen")
+    def test_timeout_must_be_within_supported_bounds(self, urlopen):
         with tempfile.TemporaryDirectory() as directory:
+            self._populate_planner_context(directory)
             for timeout in (0, -1, 1801, True, "300"):
                 with self.subTest(timeout=timeout):
                     with self.assertRaisesRegex(AgentRequestError, "timeout must be an integer"):
                         request_plan("Inspect repository", directory, timeout=timeout)
 
     @patch("ario_planner.urllib.request.urlopen")
-    def test_invalid_workflow_is_rejected_before_execution(self, urlopen):
+    def test_unapproved_paths_are_rejected_before_workflow_construction(self, urlopen):
         with tempfile.TemporaryDirectory() as directory:
-            bad = self.valid_workflow()
-            bad["shell"] = "not allowed"
-            urlopen.return_value = ollama_response(bad)
-            with self.assertRaisesRegex(AgentRequestError, "exactly workflow_id"):
+            self._populate_planner_context(directory)
+            invalid = self.valid_recommendation()
+            invalid["implementation_path"] = "../outside.py"
+            urlopen.side_effect = [ollama_response(invalid), ollama_response(invalid)]
+            with self.assertRaisesRegex(AgentRequestError, "recommendation remained invalid"):
                 request_plan("Inspect repository", directory)
 
     @patch("ario_planner.urllib.request.urlopen")
-    def test_path_escape_is_rejected_during_plan_validation(self, urlopen):
+    def test_malformed_ollama_envelope_is_rejected(self, urlopen):
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = b'{"message": {}}'
+        urlopen.return_value = response
         with tempfile.TemporaryDirectory() as directory:
-            bad = self.valid_workflow()
-            bad["stages"][0]["task"]["actions"][0]["path"] = ".."
-            urlopen.return_value = ollama_response(bad)
-            with self.assertRaisesRegex(AgentRequestError, "escapes the configured workspace"):
+            self._populate_planner_context(directory)
+            with self.assertRaisesRegex(AgentRequestError, "valid JSON recommendation"):
                 request_plan("Inspect repository", directory)
 
     @patch("ario_planner.run_workflow")
@@ -264,15 +277,6 @@ class LocalOllamaPlannerTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(json.loads(output.getvalue())["status"], "COMPLETED")
         run_workflow_mock.assert_called_once()
-
-    @patch("ario_planner.urllib.request.urlopen")
-    def test_malformed_ollama_envelope_is_rejected(self, urlopen):
-        response = MagicMock()
-        response.__enter__.return_value.read.return_value = b'{"message": {}}'
-        urlopen.return_value = response
-        with tempfile.TemporaryDirectory() as directory:
-            with self.assertRaisesRegex(AgentRequestError, "valid JSON workflow"):
-                request_plan("Inspect repository", directory)
 
 
 if __name__ == "__main__":

@@ -12,7 +12,7 @@ The planner does not read arbitrary workspace files. In addition to the metadata
 - Ollama running locally at \`http://127.0.0.1:11434\`
 - The selected model already pulled into Ollama; default: \`qwen2.5:7b\`
 
-No third-party Python dependency is added. The planner uses the Python standard library and the existing Ario runtime.
+No third-party Python dependency is added. The planner uses the Python standard library and the existing Ario runtime. Ollama recommends a bounded engineering question and rationale only; it does not author workflow stages, conditions, action lists, or operational identifiers. Ario validates that recommendation and builds a fixed one-stage, two-action, read-only workflow locally.
 
 ## Plan only (default)
 
@@ -44,7 +44,7 @@ python .\implementation\ario_planner.py --goal "Inspect the Ario implementation 
 - Unknown fields, unsupported tools, invalid branch conditions, and workspace path escapes are rejected before execution.
 - Unresolved model template values (for example, `unique-id` or `short task goal`) are rejected; they cannot be reported as `PLAN_READY`.
 - If the model returns a workflow with an invalid top-level schema, the planner sends one schema-specific correction request. It stops with `UNKNOWN` if the second response is still invalid; it does not execute an invalid plan. The prompt explicitly requires the first stage to omit `when` and later conditions to reference only exact earlier stage IDs.
-- Workflow IDs, task IDs, action-step IDs, success-criterion IDs, and diagnostic-step IDs are normalized locally. Stage IDs are preserved because branch conditions refer to them; ambiguous duplicate stage IDs fail closed rather than being guessed. Task IDs are then assigned a unique per-run value before execution.
+- The model returns only four recommendation fields: an approved implementation path, its paired regression-test path, one bounded engineering question, and a short rationale. Both files must be present in the bounded planning context. Ario constructs the workflow locally with one fixed stage and two distinct `read_text` actions, so model-generated duplicate stage IDs, conditions, action IDs, or write instructions cannot enter the workflow schema. Workflow and task IDs are generated locally for each run.
 - The model is instructed not to invent SHA-256 preconditions. A write that lacks a correct current hash fails closed; a planner response cannot bypass runtime validation.
 - The planner prioritizes `ario_planner.py` and its regression tests in the bounded context. Its prompt now requires exactly one stage with two distinct `read_text` actions: an observed implementation module and its relevant test file. Directory listings are disallowed for this request because inventory is already supplied. The task goal must name both paths and one concrete bounded engineering question. A post-schema quality gate still rejects repeated identical actions and directory-only plans; these constraints improve evidence quality but do not establish that the proposed task is the best possible task.
 - The plan may still be wrong, incomplete, or semantically inadequate. Exact postconditions and the append-only application ledger provide bounded checks, not proof of general correctness or tamper-proof history.
