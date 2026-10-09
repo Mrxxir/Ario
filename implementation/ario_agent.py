@@ -656,10 +656,15 @@ def main(argv=None) -> int:
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--task", help="Path to a declarative task JSON file")
     mode.add_argument("--inspect-task-id", help="Read-only recovery inspection for a task_id in the ledger")
+    mode.add_argument("--inspect-lock", action="store_true", help="Read-only inspection of the execution lock beside the ledger")
     parser.add_argument("--workspace", help="Existing workspace root (required with --task)")
     parser.add_argument("--ledger", required=True, help="Append-only JSONL audit ledger path")
     args = parser.parse_args(argv)
     try:
+        if args.inspect_lock:
+            result = inspect_execution_lock(args.ledger)
+            print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+            return 0 if result["status"] in {"NO_LOCK", "LOCK_PRESENT"} else 2
         if args.inspect_task_id is not None:
             result = inspect_task_history(args.inspect_task_id, args.ledger)
             print(json.dumps(result, ensure_ascii=False, sort_keys=True))
