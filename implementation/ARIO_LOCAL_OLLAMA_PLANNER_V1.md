@@ -43,7 +43,7 @@ python .\implementation\ario_planner.py --goal "Inspect the Ario implementation 
 - Ollama responses are capped at 1 MB. The goal is capped at 2,000 characters. The existing workflow limit is eight stages and each task is limited to eight actions.
 - Unknown fields, unsupported tools, invalid branch conditions, and workspace path escapes are rejected before execution.
 - Unresolved model template values (for example, `unique-id` or `short task goal`) are rejected; they cannot be reported as `PLAN_READY`.
-- If the model returns a workflow with an invalid top-level schema, the planner sends one schema-specific correction request. It stops with `UNKNOWN` if the second response is still invalid; it does not execute an invalid plan.
+- If the model returns a workflow with an invalid top-level schema, the planner sends one schema-specific correction request. It stops with `UNKNOWN` if the second response is still invalid; it does not execute an invalid plan. The prompt explicitly requires the first stage to omit `when` and later conditions to reference only exact earlier stage IDs.
 - Task IDs and workflow IDs are assigned by the local runtime, not trusted from model output.
 - The model is instructed not to invent SHA-256 preconditions. A write that lacks a correct current hash fails closed; a planner response cannot bypass runtime validation.
 - The plan may still be wrong, incomplete, or semantically inadequate. Exact postconditions and the append-only application ledger provide bounded checks, not proof of general correctness or tamper-proof history.
