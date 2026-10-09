@@ -123,6 +123,50 @@ class BoundedAgentTests(unittest.TestCase):
             self.assertEqual(result["status"], "STOPPED")
             self.assertEqual(target.read_text(encoding="utf-8"), "keep this")
 
+    def test_recovery_preflight_records_target_and_backup_evidence_without_writing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "workspace"
+            root.mkdir()
+            target = root / "notes.txt"
+            target.write_bytes(b"current version")
+            ledger = Path(directory) / "state" / "events.jsonl"
+            backup = ledger.parent / "backups" / "fixture" / "notes.txt"
+            backup.parent.mkdir(parents=True)
+            backup.write_bytes(b"saved version")
+            before_target = target.read_bytes()
+            before_backup = backup.read_bytes()
+            task = self.task([{
+                "step_id": "preflight", "tool": "recovery_preflight",
+                "path": "notes.txt", "backup_path": "fixture/notes.txt",
+            }])
+            result = run_task(task, root, ledger)
+            self.assertEqual(result["status"], "COMPLETED")
+            observation = result["steps"][0]["observation"]
+            self.assertEqual(observation["assessment"], "DIFFERENT_CONTENT")
+            self.assertFalse(observation["content_identical"])
+            self.assertFalse(observation["write_performed"])
+            self.assertFalse(observation["automatic_restore"])
+            self.assertEqual(observation["target_sha256"], hashlib.sha256(before_target).hexdigest())
+            self.assertEqual(observation["backup_sha256"], hashlib.sha256(before_backup).hexdigest())
+            self.assertEqual(target.read_bytes(), before_target)
+            self.assertEqual(backup.read_bytes(), before_backup)
+            event = json.loads(ledger.read_text(encoding="utf-8").splitlines()[-1])
+            self.assertEqual(event["steps"][0]["observation"]["assessment"], "DIFFERENT_CONTENT")
+
+    def test_recovery_preflight_rejects_backup_traversal_before_any_write(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "workspace"
+            root.mkdir()
+            target = root / "notes.txt"
+            target.write_text("keep", encoding="utf-8")
+            task = self.task([{
+                "step_id": "preflight", "tool": "recovery_preflight",
+                "path": "notes.txt", "backup_path": "../outside.txt",
+            }])
+            result = run_task(task, root, Path(directory) / "state" / "events.jsonl")
+            self.assertEqual(result["status"], "STOPPED")
+            self.assertEqual(target.read_text(encoding="utf-8"), "keep")
+
     def test_file_fingerprint_and_backup_inspection_are_read_only(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "workspace"
