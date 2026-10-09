@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import os
 import subprocess
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -11,7 +14,7 @@ from typing import Any
 
 MAX_STEPS = 8
 MAX_READ_BYTES = 20_000
-ALLOWED_TOOLS = {"inspect_directory", "read_text", "git_status", "compile_python", "run_tests"}
+ALLOWED_TOOLS = {"inspect_directory", "read_text", "git_status", "compile_python", "run_tests", "replace_text"}
 
 
 class AgentRequestError(ValueError):
@@ -47,7 +50,7 @@ def parse_task(payload: Any) -> dict:
     seen: set[str] = set()
     normalized = []
     for index, action in enumerate(actions):
-        if not isinstance(action, dict) or set(action) - {"step_id", "tool", "path"}:
+        if not isinstance(action, dict) or set(action) - {"step_id", "tool", "path", "content", "expected_sha256"}:
             raise AgentRequestError(f"actions[{index}] has an invalid shape")
         if not {"step_id", "tool"} <= set(action):
             raise AgentRequestError(f"actions[{index}] requires step_id and tool")
@@ -58,13 +61,25 @@ def parse_task(payload: Any) -> dict:
             raise AgentRequestError(f"actions[{index}].step_id must be unique and non-empty")
         if tool not in ALLOWED_TOOLS:
             raise AgentRequestError(f"actions[{index}].tool is not allowlisted")
-        if tool in {"inspect_directory", "read_text", "compile_python"}:
+        if tool in {"inspect_directory", "read_text", "compile_python", "replace_text"}:
             if not isinstance(action.get("path"), str):
                 raise AgentRequestError(f"actions[{index}] requires a relative path")
         elif "path" in action:
             raise AgentRequestError(f"actions[{index}] does not accept path")
+        if tool == "replace_text":
+            if not isinstance(action.get("content"), str):
+                raise AgentRequestError(f"actions[{index}].content must be a string")
+            expected = action.get("expected_sha256")
+            if not isinstance(expected, str) or len(expected) != 64 or any(ch not in "0123456789abcdefABCDEF" for ch in expected):
+                raise AgentRequestError(f"actions[{index}].expected_sha256 must be a 64-character SHA-256 hex digest")
+        elif "content" in action or "expected_sha256" in action:
+            raise AgentRequestError(f"actions[{index}] content/hash fields are only valid for replace_text")
         seen.add(step_id)
-        normalized.append({"step_id": step_id, "tool": tool, **({"path": action["path"]} if "path" in action else {})})
+        normalized_action = {"step_id": step_id, "tool": tool}
+        for field in ("path", "content", "expected_sha256"):
+            if field in action:
+                normalized_action[field] = action[field]
+        normalized.append(normalized_action)
     return {"task_id": payload["task_id"], "goal": payload["goal"], "actions": normalized}
 
 
@@ -85,8 +100,79 @@ def _run(command: list[str], cwd: Path, timeout: int = 90) -> dict:
         return {"exit_code": 127, "stdout": "", "stderr": str(exc)}
 
 
-def execute_action(action: dict, root: Path) -> dict:
+def _replace_existing_text(action: dict, root: Path, backup_root: Path) -> dict:
+    target = _inside(root, action["path"])
+    if not target.is_file():
+        raise AgentRequestError("replace_text requires an existing regular file")
+    if target.is_symlink():
+        raise AgentRequestError("replace_text refuses symbolic links")
+    backup_root = backup_root.resolve()
+    try:
+        backup_root.relative_to(root)
+    except ValueError:
+        pass
+    else:
+        raise AgentRequestError("backup directory must be outside the workspace")
+    old_bytes = target.read_bytes()
+    if len(old_bytes) > MAX_READ_BYTES:
+        raise AgentRequestError(f"replace_text is limited to {MAX_READ_BYTES} original bytes")
+    actual_hash = hashlib.sha256(old_bytes).hexdigest()
+    expected_hash = action["expected_sha256"].lower()
+    if actual_hash != expected_hash:
+        raise AgentRequestError("SHA-256 precondition failed; file was not changed")
+    new_bytes = action["content"].encode("utf-8")
+    if len(new_bytes) > MAX_READ_BYTES:
+        raise AgentRequestError(f"replace_text is limited to {MAX_READ_BYTES} replacement bytes")
+    relative = target.relative_to(root)
+    backup = backup_root / datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ") / relative
+    backup.parent.mkdir(parents=True, exist_ok=False)
+    backup.write_bytes(old_bytes)
+    temp_name = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="wb", dir=target.parent, prefix=".ario-replace-", delete=False) as temp:
+            temp.write(new_bytes)
+            temp.flush()
+            os.fsync(temp.fileno())
+            temp_name = temp.name
+        os.replace(temp_name, target)
+        temp_name = None
+        written_hash = hashlib.sha256(target.read_bytes()).hexdigest()
+        expected_new_hash = hashlib.sha256(new_bytes).hexdigest()
+        if written_hash != expected_new_hash:
+            restore_name = None
+            try:
+                with tempfile.NamedTemporaryFile(mode="wb", dir=target.parent, prefix=".ario-restore-", delete=False) as restore:
+                    restore.write(old_bytes)
+                    restore.flush()
+                    os.fsync(restore.fileno())
+                    restore_name = restore.name
+                os.replace(restore_name, target)
+                restore_name = None
+            finally:
+                if restore_name and os.path.exists(restore_name):
+                    os.unlink(restore_name)
+            raise AgentRequestError("post-write hash verification failed; original bytes restored from memory")
+    except Exception:
+        if temp_name and os.path.exists(temp_name):
+            os.unlink(temp_name)
+        raise
+    return {
+        "ok": True,
+        "path": str(relative),
+        "backup_path": str(backup),
+        "before_sha256": actual_hash,
+        "after_sha256": written_hash,
+        "bytes_written": len(new_bytes),
+        "verified": True,
+    }
+
+
+def execute_action(action: dict, root: Path, backup_root: Path | None = None) -> dict:
     tool = action["tool"]
+    if tool == "replace_text":
+        if backup_root is None:
+            raise AgentRequestError("replace_text requires an external backup directory")
+        return _replace_existing_text(action, root, backup_root)
     if tool == "inspect_directory":
         target = _inside(root, action["path"])
         if not target.is_dir():
@@ -138,6 +224,7 @@ def run_task(payload: Any, workspace: str | Path, ledger_path: str | Path) -> di
     if not root.is_dir():
         raise AgentRequestError("workspace must be an existing directory")
     ledger = Path(ledger_path).resolve()
+    backup_root = ledger.parent / "backups"
     started = datetime.now(timezone.utc).isoformat()
     result = {
         "task_id": task["task_id"], "goal": task["goal"], "status": "RUNNING",
@@ -148,7 +235,7 @@ def run_task(payload: Any, workspace: str | Path, ledger_path: str | Path) -> di
     for action in task["actions"]:
         step = {"step_id": action["step_id"], "tool": action["tool"], "status": "RUNNING"}
         try:
-            observation = execute_action(action, root)
+            observation = execute_action(action, root, backup_root)
             step["observation"] = observation
             step["status"] = "SUCCEEDED" if observation.get("ok", True) else "FAILED"
         except (AgentRequestError, OSError, UnicodeError) as exc:
