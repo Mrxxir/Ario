@@ -178,7 +178,7 @@ def build_observation(workspace: str | Path) -> dict[str, Any]:
 
 
 def _assign_local_identifiers(proposed: dict, goal: str) -> dict:
-    """Replace model-generated IDs locally while preserving unambiguous branch references."""
+    """Replace model-generated task/action IDs while preserving stage references."""
     stages = proposed.get("stages")
     if not isinstance(stages, list) or not stages:
         return proposed
@@ -191,37 +191,47 @@ def _assign_local_identifiers(proposed: dict, goal: str) -> dict:
             raise AgentRequestError(f"stages[{index}].stage_id must be a non-empty string")
         original_ids.append(stage_id)
     if len(set(original_ids)) != len(original_ids):
-        raise AgentRequestError("model stage_id values are ambiguous; stage IDs must be unique before branch normalization")
-    id_map = {old: f"stage-{index:02d}" for index, old in enumerate(original_ids, start=1)}
+        raise AgentRequestError("model stage_id values are ambiguous; stage IDs must be unique before branch validation")
+    known_stage_ids = set(original_ids)
     for index, stage in enumerate(stages, start=1):
-        stage["stage_id"] = id_map[original_ids[index - 1]]
         task = stage.get("task")
         if not isinstance(task, dict):
             raise AgentRequestError(f"stages[{index - 1}].task must be an object")
+        raw_task_id = task.get("task_id")
+        if isinstance(raw_task_id, str) and raw_task_id.strip().lower() in {"placeholder", "unique-id", "unique id", "todo", "tbd", "example"}:
+            raise AgentRequestError(f"stages[{index - 1}].task.task_id is an unresolved template placeholder")
         task["task_id"] = f"TASK-PLANNER-{index:02d}"
         actions = task.get("actions")
         if isinstance(actions, list):
             for action_index, action in enumerate(actions, start=1):
-                if isinstance(action, dict):
-                    action["step_id"] = f"step-{index:02d}-{action_index:02d}"
+                if not isinstance(action, dict):
+                    continue
+                raw_step_id = action.get("step_id")
+                if isinstance(raw_step_id, str) and raw_step_id.strip().lower() in {"placeholder", "unique-id", "unique id", "todo", "tbd", "example"}:
+                    raise AgentRequestError(f"stages[{index - 1}].task.actions[{action_index - 1}].step_id is an unresolved template placeholder")
+                action["step_id"] = f"step-{index:02d}-{action_index:02d}"
         criteria = task.get("success_criteria")
         if isinstance(criteria, list):
             for criterion_index, criterion in enumerate(criteria, start=1):
                 if isinstance(criterion, dict):
+                    raw_id = criterion.get("criterion_id")
+                    if isinstance(raw_id, str) and raw_id.strip().lower() in {"placeholder", "unique-id", "unique id", "todo", "tbd", "example"}:
+                        raise AgentRequestError(f"success_criteria[{criterion_index - 1}].criterion_id is an unresolved template placeholder")
                     criterion["criterion_id"] = f"criterion-{index:02d}-{criterion_index:02d}"
         diagnostics = task.get("failure_diagnostics")
         if isinstance(diagnostics, list):
             for diagnostic_index, diagnostic in enumerate(diagnostics, start=1):
                 if isinstance(diagnostic, dict):
+                    raw_id = diagnostic.get("step_id")
+                    if isinstance(raw_id, str) and raw_id.strip().lower() in {"placeholder", "unique-id", "unique id", "todo", "tbd", "example"}:
+                        raise AgentRequestError(f"failure_diagnostics[{diagnostic_index - 1}].step_id is an unresolved template placeholder")
                     diagnostic["step_id"] = f"diagnostic-{index:02d}-{diagnostic_index:02d}"
         condition = stage.get("when")
         if isinstance(condition, dict) and isinstance(condition.get("stage_id"), str):
-            referenced = condition["stage_id"]
-            if referenced not in id_map:
+            if condition["stage_id"] not in known_stage_ids:
                 raise AgentRequestError(
-                    f"stages[{index - 1}].when references unknown stage_id {referenced!r}"
+                    f"stages[{index - 1}].when references unknown stage_id {condition['stage_id']!r}"
                 )
-            condition["stage_id"] = id_map[referenced]
     proposed["workflow_id"] = "WF-PLANNER-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     proposed["goal"] = goal.strip()
     return proposed
