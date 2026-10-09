@@ -65,6 +65,8 @@ The placeholder hash is illustrative, not executable. If the precondition fails,
 
 - `inspect_directory`: list a directory (maximum 200 entries).
 - `read_text`: read UTF-8 text under the workspace, capped at 20,000 bytes.
+- `file_fingerprint`: read-only SHA-256 and byte count for an existing workspace file; it does not expose file contents or modify the file.
+- `inspect_backup`: read-only SHA-256 and byte count for an existing backup selected by a relative path under the external backup directory; it rejects traversal and symbolic-link paths.
 - `git_status`: run fixed `git status --short --branch`.
 - `compile_python`: compile one existing `.py` file.
 - `run_tests`: run the fixed `python -m pytest -q tests` command from `implementation/`.
@@ -79,6 +81,7 @@ There is no arbitrary shell, arbitrary command, network, delete-file, or privile
 - The full task schema and allowlist are validated before execution.
 - Each step produces an observation recorded to the JSONL ledger.
 - A failed step stops the task; no automatic retry or corrective write is attempted.
+- Recovery preflight can use `file_fingerprint` to obtain the target's current hash and `inspect_backup` to confirm the candidate backup's hash. A subsequent `restore_backup` task must explicitly supply the observed current hash; inspection never triggers a write or chooses a backup automatically.
 - `COMPLETED` means all declared steps returned success. It does **not** prove the natural-language goal was semantically achieved.
 - The event ledger is an audit aid, not tamper-proof storage. A local administrator can modify it; cryptographic integrity, OS-level isolation, approvals for writes, and independent goal verification remain future work.
 - Rollback is itself a guarded write, not magic undo: it requires a known backup-relative path and the exact current-file hash, and preserves the replaced current version before restoration.
