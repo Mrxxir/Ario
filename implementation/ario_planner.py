@@ -247,41 +247,66 @@ def request_plan(
             "Produce a bounded workflow, not prose.",
         ],
     }
-    body = json.dumps({
-        "model": model,
-        "stream": False,
-        "format": "json",
-        "options": {"temperature": 0},
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)},
-        ],
-    }).encode("utf-8")
-    request = urllib.request.Request(
-        endpoint,
-        data=body,
-        headers={"Content-Type": "application/json", "Accept": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            raw = response.read(MAX_RESPONSE_BYTES + 1)
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        raise AgentRequestError(f"could not obtain a response from local Ollama: {exc}") from exc
-    if len(raw) > MAX_RESPONSE_BYTES:
-        raise AgentRequestError("Ollama response exceeded the 1 MB safety limit")
-    try:
-        envelope = json.loads(raw.decode("utf-8"))
-        content = envelope["message"]["content"]
-        proposed = json.loads(content)
-    except (UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError) as exc:
-        raise AgentRequestError("Ollama did not return a valid JSON workflow") from exc
-    if not isinstance(proposed, dict):
-        raise AgentRequestError("Ollama workflow must be a JSON object")
-    # Runtime IDs are assigned locally; the model cannot choose a replayable ID.
-    proposed["workflow_id"] = "WF-PLANNER-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-    proposed["goal"] = goal.strip()
-    workflow = parse_workflow(proposed)
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)},
+    ]
+    workflow = None
+    for attempt in range(2):
+        body = json.dumps({
+            "model": model,
+            "stream": False,
+            "format": "json",
+            "options": {"temperature": 0},
+            "messages": messages,
+        }).encode("utf-8")
+        request = urllib.request.Request(
+            endpoint,
+            data=body,
+            headers={"Content-Type": "application/json", "Accept": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                raw = response.read(MAX_RESPONSE_BYTES + 1)
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            raise AgentRequestError(f"could not obtain a response from local Ollama: {exc}") from exc
+        if len(raw) > MAX_RESPONSE_BYTES:
+            raise AgentRequestError("Ollama response exceeded the 1 MB safety limit")
+        try:
+            envelope = json.loads(raw.decode("utf-8"))
+            content = envelope["message"]["content"]
+            proposed = json.loads(content)
+        except (UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError) as exc:
+            raise AgentRequestError("Ollama did not return a valid JSON workflow") from exc
+        if not isinstance(proposed, dict):
+            raise AgentRequestError("Ollama workflow must be a JSON object")
+        # Runtime IDs and the requested goal are assigned locally, not trusted from the model.
+        proposed["workflow_id"] = "WF-PLANNER-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+        proposed["goal"] = goal.strip()
+        try:
+            workflow = parse_workflow(proposed)
+            break
+        except AgentRequestError as exc:
+            if attempt == 1:
+                raise AgentRequestError(
+                    f"Ollama workflow schema remained invalid after one correction attempt: {exc}"
+                ) from exc
+            # Give the model one bounded opportunity to correct its own schema error.
+            # The response is untrusted and is never executed unless it passes all validators.
+            messages.extend([
+                {"role": "assistant", "content": content},
+                {"role": "user", "content": (
+                    "Your previous JSON failed Ario's strict workflow schema validation: "
+                    f"{exc}. Return a corrected JSON object containing exactly these top-level "
+                    "keys and no others: workflow_id, goal, stages. Each stage must contain "
+                    "stage_id and task, with optional when. Each task must follow the exact "
+                    "schema from the system instructions. Do not repeat observations or add "
+                    "planning_context at the workflow top level. Return only the corrected JSON."
+                )},
+            ])
+    if workflow is None:
+        raise AgentRequestError("Ollama did not produce a valid workflow")
     _reject_placeholder_values(workflow)
     _validate_paths(workflow, root)
     # Task IDs are assigned locally so the model cannot accidentally or deliberately
