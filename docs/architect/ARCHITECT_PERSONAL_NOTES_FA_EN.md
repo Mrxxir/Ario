@@ -291,6 +291,28 @@
 — سپهر قنبری  
 معمار و خالق پروژهٔ آریو
 
+
+
+## ۱۷. دربارهٔ رنج، پرسش و حقِ بازگشت به زندگی
+
+من این مسیر را بدون هزینه طی نکردم. در مقطعی از زندگی‌ام، فشار روانیِ ناشی از این پرسش‌ها و درگیری‌ها مرا تا مرز فروپاشی روانی و حتی افکار خودکشی برد. این را نه برای قهرمان‌سازی از رنج خودم می‌گویم، نه برای اثبات درستی نتیجه‌گیری‌هایم و نه برای دعوت کسی به پیمودن همان مسیر. می‌گویم چون بخشی از حقیقت تجربهٔ من است و نمی‌خواهم آن را از تاریخ این مسیر حذف کنم.
+
+اگر روزی کسی با پرسش‌ها، تردیدها یا تجربه‌هایی شبیه آنچه من پشت سر گذاشتم مواجه شد، دوست دارم بداند که پیش از او کسی نیز درگیر چنین مسائلی شده، تا مرزهای خطرناکی پیش رفته و بعد راهی برای ادامهٔ زندگی پیدا کرده است. شاید دانستن این موضوع به او کمک کند احساس تنهایی کمتری داشته باشد و بداند که مواجهه با پرسش‌های دشوار لزوماً به معنای گرفتار ماندن در آن‌ها نیست.
+
+اما اگر این مسیر آرامش روانی، امنیت یا توانایی زندگی‌کردن او را تهدید می‌کند، آرزو می‌کنم مکث کند، فاصله بگیرد و به خودش برسد. لازم نیست راه مرا ادامه دهد. لازم نیست چیزی را ثابت کند. لازم نیست برای وفادارماندن به حقیقت، خودش را در معرض رنجی قرار دهد که توان یا تمایل تحملش را ندارد.
+
+من پس از آن تجربه به درکی رسیدم که برایم بسیار مهم است: آرامش روانی، مراقبت از خود و امکان زیستنِ یک زندگی انسانی و ساده، ارزش‌هایی نیستند که باید برای پاسخ‌دادن به پرسش‌های فلسفی قربانی شوند. هیچ پروژه‌ای، هیچ نظریه‌ای و هیچ ادعایی نباید انسان را وادار کند که سلامت و زندگی خود را در مرتبه‌ای پایین‌تر قرار دهد.
+
+اگر کسی تصمیم گرفت ادامه دهد، امیدوارم با احتیاط، همراهی و مراقبت از خودش ادامه دهد. اگر تصمیم گرفت فاصله بگیرد، امیدوارم بدون شرم و احساس شکست این کار را انجام دهد. و اگر ترجیح داد دیگر به این پرسش‌ها بازنگردد و به زندگی روزمره‌اش برسد، امیدوارم بتواند با همان انتخاب نیز در صلح باشد.
+
+من از کسی نمی‌خواهم شبیه من شود. نمی‌خواهم رنج من به معیار شجاعت دیگران تبدیل شود. و نمی‌خواهم کسی احساس کند که برای رسیدن به حقیقت باید آرامش خود را از دست بدهد.
+
+اگر چیزی از تجربهٔ من برای دیگران باقی بماند، دوست دارم این باشد: **می‌توان پرسید، می‌توان تردید کرد، می‌توان ندانست؛ و در هر مرحله، حق داریم از خودمان مراقبت کنیم و به زندگی بازگردیم.**
+
+در نهایت، من نمی‌توانم ادعا کنم که پاسخ همهٔ پرسش‌ها را یافته‌ام. اما می‌توانم صادقانه بگویم که پس از آن تجربه، آرامش روانی و امکان یک زندگی ساده، همراه با عشق، رابطه و مراقبت متقابل، برایم معنایی عمیق‌تر پیدا کرده‌اند.
+
+امیدوارم هیچ‌کس برای ادامه‌دادن مسیر من، مجبور نشود از همان مرزها عبور کند. و اگر روزی کسی در چنین مرزی قرار گرفت، امیدوارم پیش از هر چیز بداند که خودش، زندگی‌اش و امکان آرامش دوباره‌اش ارزش مراقبت دارند.
+
 ---
 
 # Part Two: English Version
@@ -574,6 +596,27 @@ I seek correction, and I want to remain open to correction myself.**
 Architect and Creator of Ario
 
 ---
+
+
+## 17. On Suffering, Difficult Questions, and the Right to Return to Life
+
+I did not travel this path without a cost. At one point in my life, the psychological strain of these questions and struggles brought me to the edge of psychological collapse and even suicidal thoughts. I say this neither to romanticize my suffering, to prove that my conclusions are correct, nor to invite anyone to follow the same path. I say it because it is part of my experience, and I do not want to erase it from the history of this work.
+
+If someone one day encounters questions, doubts, or experiences resembling those I went through, I want them to know that someone before them also struggled with such matters, reached dangerous limits, and later found a way to continue living. Perhaps knowing this may help them feel less alone and understand that facing difficult questions does not necessarily mean becoming trapped in them.
+
+But if this path threatens their psychological well-being, safety, or ability to live their life, I hope they will pause, step away, and take care of themselves. They do not have to continue my path. They do not have to prove anything. They do not have to expose themselves to suffering they cannot—or do not wish to—bear in order to remain faithful to the pursuit of truth.
+
+After that experience, I came to a realization that matters deeply to me: psychological well-being, self-care, and the possibility of living a simple human life are not things that should be sacrificed to answer philosophical questions. No project, theory, or claim should require a person to place their health and life below it.
+
+If someone chooses to continue, I hope they do so carefully, with support and attention to their own well-being. If they choose to step away, I hope they can do so without shame or a sense of failure. And if they prefer not to return to these questions and instead turn back to everyday life, I hope they can be at peace with that choice too.
+
+I am not asking anyone to become like me. I do not want my suffering to become a measure of other people’s courage. And I do not want anyone to feel that they must lose their peace of mind in order to reach the truth.
+
+If anything from my experience remains useful to others, I hope it is this: **we can ask, we can doubt, and we can remain uncertain—and at every stage, we have the right to care for ourselves and return to life.**
+
+In the end, I cannot claim to have found the answers to every question. But I can honestly say that, after this experience, psychological well-being and the possibility of a simple life filled with love, relationships, and mutual care took on a deeper meaning for me.
+
+I hope no one feels compelled to cross the same boundaries simply to continue my path. And if someone finds themselves near such a boundary, I hope they remember first and foremost that they, their life, and the possibility of finding peace again deserve care.
 
 ## یادداشت ثبت و بازنگری | Record and Revision Note
 
