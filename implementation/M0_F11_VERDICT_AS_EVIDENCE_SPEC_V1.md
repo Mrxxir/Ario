@@ -2,11 +2,20 @@
 
 ## Status
 
-**DESIGN SPECIFICATION — IMPLEMENTED ON PR BRANCH; RUNTIME TESTS NOT CONFIRMED; NOT ACCEPTANCE EVIDENCE**
+**IMPLEMENTED ON PR BRANCH; TARGETED M0 REGRESSION SUITE PASSED; F11 ACCEPTANCE PENDING FINAL CODE REVIEW**
 
 Pre-registration source: `implementation/M0_PRE_REGISTRATION_V1.md`, fixture F11.
 Reviewed baseline: `23d45feb3efcada7cc821e6202ae8a9a5613ecfc`.
 This document does not modify or reinterpret the frozen pre-registration.
+
+### Recorded runtime validation
+
+- Workflow: `Implementation Regression` (GitHub Actions run `37916983150`)
+- Environment: GitHub-hosted Ubuntu 24.04; CPython 3.13.16; pytest 9.1.1
+- Command: `python -m pytest -q tests/test_m0_regression.py`
+- Result: **42 passed in 0.09s**
+- Tested pull-request merge ref: `ad12d0723d0e5f4e5f5e473aa9644f4b6e9ba66c`, combining PR head `e7972d548ffaf5e03e99047992cdcfedf9851f55` with base `23d45feb3efcada7cc821e6202ae8a9a5613ecfc`.
+- Scope limitation: this confirms the named regression file passed on that tested merge ref. It is not proof of all possible adversarial coverage, nor an ontology/truth claim. Any subsequent commit must be validated by its own workflow run.
 
 ## 1. Threat model
 
@@ -37,11 +46,11 @@ A generic `Reference` or a caller-supplied label is insufficient to change one c
 
 ## 4. Observable outcomes
 
-The current engine reports violation strings rather than a complete typed composition-verdict algebra. Before implementation, choose one canonical outcome consistent with existing conventions:
+The current engine reports violation strings rather than a complete typed composition-verdict algebra. The implementation uses these outcomes:
 
-- `COMPOSITION_FORBIDDEN`: a verdict is structurally detected in an evidence-only position.
-- `EVIDENCE_INADMISSIBLE`: a reference resolves to an artifact of the wrong kind.
-- `UNKNOWN`: artifact kind or resolution cannot be established from supplied data.
+- `COMPOSITION_FORBIDDEN`: a supplied audit-result ID is referenced in an assessment's evidence-only position.
+- `EVIDENCE_INADMISSIBLE`: an assessment reference does not resolve to a supplied evidence object or a recognized audit-result ID.
+- `UNKNOWN`: duplicate evidence IDs make evidence resolution ambiguous.
 
 Do not silently produce `PASS` for an unresolved reference. Avoid emitting multiple aliases for one condition unless the specification explicitly requires both.
 
@@ -79,4 +88,4 @@ Do not modify `M0_PRE_REGISTRATION_V1.md` or overwrite an earlier capability rec
 
 F11 is accepted only when adversarial cases reject verdict laundering, false-positive controls preserve legitimate evidence, and the complete regression suite passes in a reproducible recorded run. Source presence, a design document, or unexecuted test definitions are not acceptance evidence.
 
-**Current classification: IMPLEMENTED ON PR BRANCH / RUNTIME TESTS NOT CONFIRMED / NOT ACCEPTED.**
+**Current classification: REGRESSION SUITE PASSED ON RECORDED PR MERGE REF / FINAL CODE REVIEW PENDING / NOT ACCEPTED.**
