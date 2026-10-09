@@ -22,8 +22,9 @@ class BoundedAgentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             task = self.task([{"step_id": "s1", "tool": "inspect_directory", "path": "../"}])
-            with self.assertRaisesRegex(AgentRequestError, "workspace"):
-                run_task(task, root, root / "audit.jsonl")
+            result = run_task(task, root, root / "audit.jsonl")
+            self.assertEqual(result["status"], "STOPPED")
+            self.assertIn("workspace", result["steps"][0]["observation"]["error"])
 
     def test_successful_steps_are_observed_and_ledger_is_append_only(self):
         with tempfile.TemporaryDirectory() as directory:
