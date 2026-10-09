@@ -67,8 +67,9 @@ class BoundedWorkflowTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             ledger = root / "events.jsonl"
+            (root / "evidence.txt").write_text("ok", encoding="utf-8")
             payload = self.workflow([
-                self.stage("first", "TASK-FIRST", [{"step_id": "status", "tool": "git_status"}]),
+                self.stage("first", "TASK-FIRST", [{"step_id": "read", "tool": "read_text", "path": "evidence.txt"}]),
                 self.stage("on-stop", "TASK-STOP-BRANCH", [{"step_id": "read", "tool": "read_text", "path": "missing.txt"}],
                            {"stage_id": "first", "status": "STOPPED"}),
             ])
@@ -108,7 +109,7 @@ class BoundedWorkflowTests(unittest.TestCase):
                 self.stage("unsafe-followup", "TASK-WRITE", [{
                     "step_id": "replace", "tool": "replace_text", "path": "file.txt",
                     "content": "changed", "expected_sha256": "0" * 64,
-                }], {"stage_id": "first", "status": "STOPPED"}),
+                }], {"stage_id": "diagnose", "status": "COMPLETED"}),
             ])
 
             result = run_workflow(payload, root, ledger)
