@@ -14,7 +14,7 @@ from typing import Any
 
 MAX_STEPS = 8
 MAX_READ_BYTES = 20_000
-ALLOWED_TOOLS = {"inspect_directory", "read_text", "git_status", "compile_python", "run_tests", "replace_text", "restore_backup"}
+ALLOWED_TOOLS = {"inspect_directory", "read_text", "git_status", "compile_python", "run_tests", "replace_text", "restore_backup", "verify_text"}
 
 
 class AgentRequestError(ValueError):
@@ -61,7 +61,7 @@ def parse_task(payload: Any) -> dict:
     seen: set[str] = set()
     normalized = []
     for index, action in enumerate(actions):
-        if not isinstance(action, dict) or set(action) - {"step_id", "tool", "path", "content", "expected_sha256", "backup_path"}:
+        if not isinstance(action, dict) or set(action) - {"step_id", "tool", "path", "content", "expected_sha256", "backup_path", "expected_text"}:
             raise AgentRequestError(f"actions[{index}] has an invalid shape")
         if not {"step_id", "tool"} <= set(action):
             raise AgentRequestError(f"actions[{index}] requires step_id and tool")
@@ -72,7 +72,7 @@ def parse_task(payload: Any) -> dict:
             raise AgentRequestError(f"actions[{index}].step_id must be unique and non-empty")
         if tool not in ALLOWED_TOOLS:
             raise AgentRequestError(f"actions[{index}].tool is not allowlisted")
-        if tool in {"inspect_directory", "read_text", "compile_python", "replace_text", "restore_backup"}:
+        if tool in {"inspect_directory", "read_text", "compile_python", "replace_text", "restore_backup", "verify_text"}:
             if not isinstance(action.get("path"), str):
                 raise AgentRequestError(f"actions[{index}] requires a relative path")
         elif "path" in action:
@@ -89,13 +89,18 @@ def parse_task(payload: Any) -> dict:
             expected = action.get("expected_sha256")
             if not isinstance(expected, str) or len(expected) != 64 or any(ch not in "0123456789abcdefABCDEF" for ch in expected):
                 raise AgentRequestError(f"actions[{index}].expected_sha256 must be a 64-character SHA-256 hex digest")
-            if "content" in action:
-                raise AgentRequestError(f"actions[{index}] restore_backup does not accept content")
-        elif "content" in action or "expected_sha256" in action or "backup_path" in action:
-            raise AgentRequestError(f"actions[{index}] content/hash/backup fields are not valid for this tool")
+            if "content" in action or "expected_text" in action:
+                raise AgentRequestError(f"actions[{index}] restore_backup does not accept content or expected_text")
+        elif tool == "verify_text":
+            if not isinstance(action.get("expected_text"), str):
+                raise AgentRequestError(f"actions[{index}].expected_text must be a string")
+            if "content" in action or "expected_sha256" in action or "backup_path" in action:
+                raise AgentRequestError(f"actions[{index}] verify_text accepts only expected_text")
+        elif "content" in action or "expected_sha256" in action or "backup_path" in action or "expected_text" in action:
+            raise AgentRequestError(f"actions[{index}] content/hash/backup/expected_text fields are not valid for this tool")
         seen.add(step_id)
         normalized_action = {"step_id": step_id, "tool": tool}
-        for field in ("path", "content", "expected_sha256", "backup_path"):
+        for field in ("path", "content", "expected_sha256", "backup_path", "expected_text"):
             if field in action:
                 normalized_action[field] = action[field]
         normalized.append(normalized_action)
@@ -265,6 +270,23 @@ def _restore_existing_backup(action: dict, root: Path, backup_root: Path) -> dic
 
 def execute_action(action: dict, root: Path, backup_root: Path | None = None) -> dict:
     tool = action["tool"]
+    if tool == "verify_text":
+        target = _inside(root, action["path"])
+        if not target.is_file():
+            raise AgentRequestError("verify_text requires an existing regular file")
+        raw = target.read_bytes()
+        if len(raw) > MAX_READ_BYTES:
+            raise AgentRequestError(f"verify_text is limited to {MAX_READ_BYTES} bytes")
+        actual = raw.decode("utf-8-sig")
+        matches = actual == action["expected_text"]
+        return {
+            "ok": matches,
+            "path": action["path"],
+            "matches": matches,
+            "expected_sha256": hashlib.sha256(action["expected_text"].encode("utf-8")).hexdigest(),
+            "actual_sha256": hashlib.sha256(raw).hexdigest(),
+            "error": None if matches else "postcondition failed: file content did not match expected_text",
+        }
     if tool == "restore_backup":
         if backup_root is None:
             raise AgentRequestError("restore_backup requires an external backup directory")

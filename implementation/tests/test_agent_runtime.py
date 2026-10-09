@@ -123,6 +123,42 @@ class BoundedAgentTests(unittest.TestCase):
             self.assertEqual(result["status"], "STOPPED")
             self.assertEqual(target.read_text(encoding="utf-8"), "keep this")
 
+    def test_verify_text_passes_only_when_postcondition_matches(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "result.txt"
+            target.write_text("expected result", encoding="utf-8")
+            task = self.task([{
+                "step_id": "s1", "tool": "verify_text", "path": "result.txt",
+                "expected_text": "expected result",
+            }])
+            result = run_task(task, root, root / "audit.jsonl")
+            self.assertEqual(result["status"], "COMPLETED")
+            self.assertTrue(result["steps"][0]["observation"]["matches"])
+
+    def test_verify_text_mismatch_stops_task_and_blocks_later_steps(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "result.txt"
+            target.write_text("actual result", encoding="utf-8")
+            task = self.task([
+                {"step_id": "s1", "tool": "verify_text", "path": "result.txt",
+                 "expected_text": "expected result"},
+                {"step_id": "s2", "tool": "inspect_directory", "path": "."},
+            ])
+            result = run_task(task, root, root / "audit.jsonl")
+            self.assertEqual(result["status"], "STOPPED")
+            self.assertEqual(len(result["steps"]), 1)
+            self.assertFalse(result["steps"][0]["observation"]["matches"])
+            self.assertEqual(target.read_text(encoding="utf-8"), "actual result")
+
+    def test_verify_text_rejects_unexpected_fields(self):
+        with self.assertRaisesRegex(AgentRequestError, "verify_text accepts only"):
+            parse_task(self.task([{
+                "step_id": "s1", "tool": "verify_text", "path": "result.txt",
+                "expected_text": "x", "content": "not allowed",
+            }]))
+
     def test_stops_after_first_failed_observation(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
