@@ -1154,3 +1154,74 @@ def test_f15_claim_truth_cannot_be_downgraded_by_caller_rule_tampering():
     assert r.verdict == "FAIL"
     assert "COMPOSITION_FORBIDDEN" in r.violations
     assert "UNKNOWN" not in r.violations
+
+
+def test_f15_forbids_claim_truth_from_five_local_results():
+    from core.schema import CompositionConclusion
+
+    results, request = _f15_fixture(CompositionConclusion.CLAIM_TRUTH)
+    r = run(
+        "F15-CLAIM-TRUTH",
+        AuditInput(prior_audit_results=results, composition_requests=(request,)),
+        rule_versions=("M0-1.0", "M0-F15-1.0"),
+    )
+
+    assert r.verdict == "FAIL"
+    assert "COMPOSITION_FORBIDDEN" in r.violations
+    assert "UNKNOWN" not in r.violations
+
+
+def test_f15_claim_truth_requires_declared_firewall_version():
+    from core.schema import CompositionConclusion
+
+    results, request = _f15_fixture(CompositionConclusion.CLAIM_TRUTH)
+    r = run(
+        "F15-CLAIM-TRUTH-F15-NOT-DECLARED",
+        AuditInput(prior_audit_results=results, composition_requests=(request,)),
+        rule_versions=("M0-1.0",),
+    )
+
+    assert r.verdict == "FAIL"
+    assert "UNKNOWN" in r.violations
+    assert "COMPOSITION_FORBIDDEN" not in r.violations
+
+
+def test_f15_duplicate_participant_audit_id_is_unknown():
+    from dataclasses import replace
+    from core.schema import CompositionConclusion
+
+    results, request = _f15_fixture(CompositionConclusion.BOUNDED_SUMMARY)
+    participants = list(request.participant_results)
+    participants[-1] = replace(participants[-1], audit_id=participants[0].audit_id)
+    request = replace(request, participant_results=tuple(participants))
+    r = run(
+        "F15-DUPLICATE-PARTICIPANT-AUDIT-ID",
+        AuditInput(prior_audit_results=results, composition_requests=(request,)),
+        rule_versions=("M0-1.0", "M0-F15-1.0"),
+    )
+
+    assert r.verdict == "FAIL"
+    assert "UNKNOWN" in r.violations
+    assert "COMPOSITION_FORBIDDEN" not in r.violations
+
+
+def test_f15_duplicate_participant_irg_label_is_unknown():
+    from dataclasses import replace
+    from core.schema import CompositionConclusion, CompositionParticipantResult
+
+    results, request = _f15_fixture(CompositionConclusion.BOUNDED_SUMMARY)
+    participants = list(request.participant_results)
+    participants[-1] = CompositionParticipantResult(
+        irg_id=participants[0].irg_id,
+        audit_id=participants[-1].audit_id,
+    )
+    request = replace(request, participant_results=tuple(participants))
+    r = run(
+        "F15-DUPLICATE-PARTICIPANT-IRG-LABEL",
+        AuditInput(prior_audit_results=results, composition_requests=(request,)),
+        rule_versions=("M0-1.0", "M0-F15-1.0"),
+    )
+
+    assert r.verdict == "FAIL"
+    assert "UNKNOWN" in r.violations
+    assert "COMPOSITION_FORBIDDEN" not in r.violations
