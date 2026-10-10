@@ -448,11 +448,13 @@ class AuditEngine:
         evidence_items = tuple(evidence)
         violations: list[str] = []
         f15_enabled = "M0-F15-1.0" in rule_versions
+        prior_results = tuple(prior_audit_results)
         summary_ids = {
             summary.composition_id
-            for result in prior_audit_results
+            for result in prior_results
             for summary in result.composition_summaries
         }
+        audit_result_ids = {result.audit_id for result in prior_results}
         request_ids = {request.composition_id for request in composition_requests}
         forbidden_reference_types = {
             "AUDIT_RESULT",
@@ -471,6 +473,7 @@ class AuditEngine:
                 if f15_enabled and (
                     reference.reference_type in forbidden_reference_types
                     or observation_id in summary_ids
+                    or observation_id in audit_result_ids
                     or observation_id in request_ids
                 ):
                     violations.append("COMPOSITION_FORBIDDEN")
@@ -666,14 +669,15 @@ class AuditEngine:
                 matches = evidence_by_id.get(reference_id, [])
 
                 if f15_enabled:
+                    result_matches = audit_results_by_id.get(reference_id, [])
                     summary_count = summary_ids.get(reference_id, 0)
-                    if summary_count and matches:
+                    if (result_matches or summary_count) and matches:
                         violations.append("UNKNOWN")
                         continue
-                    if summary_count > 1:
+                    if len(result_matches) > 1 or summary_count > 1:
                         violations.append("UNKNOWN")
                         continue
-                    if summary_count == 1:
+                    if len(result_matches) == 1 or summary_count == 1:
                         violations.append("COMPOSITION_FORBIDDEN")
                         continue
 
