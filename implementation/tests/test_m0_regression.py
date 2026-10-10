@@ -1133,3 +1133,24 @@ def test_f15_rejects_composition_id_collision_with_input_audit_id():
     )
     assert "UNKNOWN" in r.violations
     assert r.verdict != "PASS"
+
+
+def test_f15_claim_truth_cannot_be_downgraded_by_caller_rule_tampering():
+    from dataclasses import replace
+    from core.schema import CompositionConclusion
+
+    results, request = _f15_fixture(CompositionConclusion.CLAIM_TRUTH)
+    request = replace(
+        request,
+        composition_rule_id="CALLER-DEFINED-ALLOW-ALL",
+        composition_rule_version="9.9",
+    )
+    r = run(
+        "F15-CLAIM-TRUTH-RULE-TAMPERING",
+        AuditInput(prior_audit_results=results, composition_requests=(request,)),
+        rule_versions=("M0-1.0", "M0-F15-1.0"),
+    )
+
+    assert r.verdict == "FAIL"
+    assert "COMPOSITION_FORBIDDEN" in r.violations
+    assert "UNKNOWN" not in r.violations
