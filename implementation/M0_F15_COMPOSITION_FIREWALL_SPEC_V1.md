@@ -53,20 +53,20 @@ The broader Cross-IRG invariants remain architectural requirements, but this F15
 
 Add a distinct `CompositionRequest` input object. It must not be represented as `Evidence` or `Assessment`.
 
-Define `CompositionInputBinding` as a typed wrapper with at least `source_irg_id`, `audit_result`, and `declared_scope`. The binding identifies what the caller says each result represents; it does not prove the declaration correct.
+Use the existing typed `CompositionParticipantResult` as the v1 binding wrapper. Its fields are `irg_id`, `audit_id`, and `declared_scope`. The `audit_id` is a reference, not a caller-supplied replacement `AuditResult` object: the engine must resolve it against exactly one item in `prior_audit_results`. This avoids trusting a caller-provided copy of a result. `irg_id` and `declared_scope` are still caller-declared labels and are not independently authenticated by the current schema.
 
-Minimum fields:
+Minimum request fields:
 
 - `composition_id`: unique identifier for this request;
-- `input_bindings`: tuple of typed `CompositionInputBinding` objects, each pairing a declared source IRG label with an actual typed `AuditResult` object and the caller-declared scope for that result;
+- `participant_results`: tuple of typed `CompositionParticipantResult` bindings;
 - `requested_input_scope`: either `SUPPLIED_RESULTS_ONLY` or `ALL_FIVE_IRGS`;
 - `composition_rule_id`;
 - `composition_rule_version`;
-- `requested_output_semantics`;
+- `requested_conclusion`: a typed `CompositionConclusion` value;
 - `scope`;
 - `limitations`.
 
-The request's input results remain typed `AuditResult` artifacts. Their `verdict`, rule versions, configuration, audit IDs, and existing `artifacts_examined` remain result metadata. They are not re-cast as observations or evidence. The binding's source IRG label and declared scope are caller-supplied assertions because the current `AuditResult` schema has no typed IRG identifier or explicit local scope field. V1 may report those declarations but must not treat them as independently verified facts.
+The request's resolved inputs remain typed `AuditResult` artifacts. Their `verdict`, rule versions, configuration, audit IDs, and existing `artifacts_examined` remain result metadata. They are not re-cast as observations or evidence. The binding's IRG label and declared scope are caller-supplied assertions because `AuditResult` has no independently authenticated IRG identifier or local-scope field. V1 may preserve and report those declarations, but must not treat them as independently verified facts.
 
 The audit invocation must declare `M0-F15-1.0` in its `rule_versions` before the specialized F15 classification is emitted. The firewall version is distinct from the bounded-summary rule identifier/version. Missing or unsupported rule/version declarations must not produce a positive composition result.
 
@@ -102,7 +102,10 @@ Other semantics—including `SAME_ENTITY`, `CONSCIOUSNESS`, confidence, ranking,
 
 - `COMPOSITION_FORBIDDEN`: a declared F15 request explicitly asks to turn local audit results into `CLAIM_TRUTH`.
 - `UNKNOWN`: inputs or rule identity are missing, unsupported, or ambiguous, or requested semantics are not classified by v1.
-- No positive result may mean “the Claim is true.” A `PASS` from the composition firewall, if used to describe a bounded summary request, means only that the implemented structural composition checks reported no violation for that summary request.
+- No positive result may mean “the Claim is true.” A `PASS` from the composition firewall means only that the implemented structural checks accepted the bounded summary request.
+- A structurally accepted `LOCAL_RESULT_SUMMARY` emits a typed `CompositionSummary` inside the new `AuditResult.composition_summaries` field. Each record preserves the resolved audit ID, caller-declared IRG label and scope, source verdict, source rule versions, and source configuration ID. Deterministic verdict counts describe only those supplied records.
+- The summary's limitations explicitly state that the caller-declared labels/scopes are not independently authenticated and that the summary does not establish Claim truth.
+- With `M0-F15-1.0` enabled, a composition summary or composition request may not be promoted into evidence or an assessment basis. References to those artifact kinds are rejected as `COMPOSITION_FORBIDDEN`; ambiguous summary-ID collisions remain `UNKNOWN`.
 
 The F15 result must preserve the distinction between the firewall's local structural verdict and the truth status of any underlying Claim.
 
