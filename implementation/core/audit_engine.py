@@ -8,7 +8,10 @@ from .schema import (
     AuditResult,
     Claim,
     CompositionConclusion,
+    CompositionInputScope,
     CompositionRequest,
+    CompositionSummary,
+    CompositionSummaryRecord,
     Evidence,
     HistoricalState,
     HistoricalMutationCandidate,
@@ -191,13 +194,14 @@ class AuditEngine:
                     rule_versions,
                 )
             )
-            violations.extend(
-                self._check_composition_requests(
+            composition_violations, composition_summaries = (
+                self._evaluate_composition_requests(
                     artifacts.composition_requests,
                     artifacts.prior_audit_results,
                     rule_versions,
                 )
             )
+            violations.extend(composition_violations)
             violations.extend(
                 self._check_historical_mutations(
                     artifacts.historical_mutation_candidates,
@@ -227,17 +231,20 @@ class AuditEngine:
             violations=tuple(violations),
             verdict=verdict,
             verdict_basis=verdict_basis,
+            composition_summaries=composition_summaries if has_primary_artifacts else (),
         )
 
     @staticmethod
-    def _check_composition_requests(
+    def _evaluate_composition_requests(
         requests: Iterable[CompositionRequest],
         prior_audit_results: Iterable[AuditResult],
         rule_versions: tuple[str, ...],
-    ) -> list[str]:
+    ) -> tuple[list[str], tuple[CompositionSummary, ...]]:
         violations: list[str] = []
-        supported_rule_id = "M0-F15"
-        supported_rule_version = "M0-F15-1.0"
+        summaries: list[CompositionSummary] = []
+        firewall_version = "M0-F15-1.0"
+        summary_rule_id = "M0-F15-LOCAL-SUMMARY"
+        summary_rule_version = "1.0"
         canonical_irg_ids = {f"IRG-{index:02d}" for index in range(1, 6)}
         results_by_id: dict[str, list[AuditResult]] = {}
         request_list = tuple(requests)
@@ -263,46 +270,93 @@ class AuditEngine:
             irg_ids = [p.irg_id for p in participants]
             audit_ids = [p.audit_id for p in participants]
 
-            # Resolve structural ambiguity before classifying the requested
-            # semantic conclusion. A forbidden truth request must not be
-            # downgraded to UNKNOWN merely by changing the caller-supplied
-            # composition rule ID/version, provided F15 itself is declared.
             if (
-                len(participants) != 5
-                or set(irg_ids) != canonical_irg_ids
-                or len(set(audit_ids)) != 5
+                not participants
+                or len(participants) > 5
+                or len(set(irg_ids)) != len(irg_ids)
+                or not set(irg_ids).issubset(canonical_irg_ids)
+                or len(set(audit_ids)) != len(audit_ids)
                 or request_id_counts[request.composition_id] != 1
                 or request.composition_id in results_by_id
             ):
                 violations.append("UNKNOWN")
                 continue
 
+            if request.requested_input_scope == CompositionInputScope.ALL_FIVE_IRGS:
+                if len(participants) != 5 or set(irg_ids) != canonical_irg_ids:
+                    violations.append("UNKNOWN")
+                    continue
+
             if any(len(results_by_id.get(aid, [])) != 1 for aid in audit_ids):
                 violations.append("UNKNOWN")
                 continue
 
-            if supported_rule_version not in rule_versions:
+            if firewall_version not in rule_versions:
                 violations.append("UNKNOWN")
                 continue
 
-            # F15-I1: direct local-result-to-Claim-truth escalation remains
-            # forbidden even if the caller supplies an unsupported rule ID
-            # or version. The declared F15 version is the governing firewall.
+            # F15-I1: a structurally unambiguous truth-escalation request
+            # cannot be downgraded by caller-controlled summary-rule fields.
             if request.requested_conclusion == CompositionConclusion.CLAIM_TRUTH:
                 violations.append("COMPOSITION_FORBIDDEN")
                 continue
 
+            if request.requested_conclusion in forbidden:
+                if (
+                    request.composition_rule_id == "M0-F15"
+                    and request.composition_rule_version == firewall_version
+                ):
+                    violations.append("COMPOSITION_FORBIDDEN")
+                else:
+                    violations.append("UNKNOWN")
+                continue
+
+            # Legacy BOUNDED_SUMMARY is deliberately not an accepted output
+            # semantic. The canonical, observable output is LOCAL_RESULT_SUMMARY.
+            if request.requested_conclusion != CompositionConclusion.LOCAL_RESULT_SUMMARY:
+                violations.append("UNKNOWN")
+                continue
+
             if (
-                request.composition_rule_id != supported_rule_id
-                or request.composition_rule_version != supported_rule_version
+                request.composition_rule_id != summary_rule_id
+                or request.composition_rule_version != summary_rule_version
             ):
                 violations.append("UNKNOWN")
                 continue
 
-            if request.requested_conclusion in forbidden:
-                violations.append("COMPOSITION_FORBIDDEN")
+            records = tuple(
+                CompositionSummaryRecord(
+                    audit_id=participant.audit_id,
+                    declared_irg_id=participant.irg_id,
+                    verdict=results_by_id[participant.audit_id][0].verdict,
+                    rule_versions=results_by_id[participant.audit_id][0].rule_versions,
+                    configuration_id=results_by_id[participant.audit_id][0].configuration_id,
+                )
+                for participant in participants
+            )
+            observed_verdicts = sorted({record.verdict for record in records})
+            verdict_counts = tuple(
+                (verdict, sum(record.verdict == verdict for record in records))
+                for verdict in observed_verdicts
+            )
+            summaries.append(
+                CompositionSummary(
+                    composition_id=request.composition_id,
+                    summary_rule_id=summary_rule_id,
+                    summary_rule_version=summary_rule_version,
+                    requested_input_scope=request.requested_input_scope,
+                    records=records,
+                    verdict_counts=verdict_counts,
+                    scope=request.scope,
+                    limitations=(
+                        request.limitations
+                        + " Declared IRG labels are caller-supplied and are not independently authenticated."
+                        + " This summary describes supplied audit-result records only; it does not establish Claim truth."
+                    ),
+                )
+            )
 
-        return violations
+        return violations, tuple(summaries)
 
     @staticmethod
     def _check_claim_identity(
