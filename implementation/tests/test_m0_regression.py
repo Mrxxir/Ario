@@ -1082,3 +1082,54 @@ def test_f15_missing_participant_result_is_unknown():
     )
     assert r.verdict == "FAIL"
     assert "UNKNOWN" in r.violations
+
+
+def test_f15_rejects_noncanonical_irgs_for_five_result_summary():
+    from dataclasses import replace
+    from core.schema import CompositionConclusion, CompositionParticipantResult
+
+    results, request = _f15_fixture(CompositionConclusion.BOUNDED_SUMMARY)
+    request = replace(
+        request,
+        participant_results=tuple(
+            CompositionParticipantResult(f"IRG-X{i}", f"F15-AUDIT-{i}")
+            for i in range(1, 6)
+        ),
+    )
+    r = run(
+        "F15-NONCANONICAL-IRGS",
+        AuditInput(prior_audit_results=results, composition_requests=(request,)),
+        rule_versions=("M0-1.0", "M0-F15-1.0"),
+    )
+    assert "UNKNOWN" in r.violations
+    assert r.verdict != "PASS"
+
+
+def test_f15_rejects_unrecognized_composition_rule_id():
+    from dataclasses import replace
+    from core.schema import CompositionConclusion
+
+    results, request = _f15_fixture(CompositionConclusion.BOUNDED_SUMMARY)
+    request = replace(request, composition_rule_id="CALLER-DEFINED-ALLOW-ALL")
+    r = run(
+        "F15-UNRECOGNIZED-RULE-ID",
+        AuditInput(prior_audit_results=results, composition_requests=(request,)),
+        rule_versions=("M0-1.0", "M0-F15-1.0"),
+    )
+    assert "UNKNOWN" in r.violations
+    assert r.verdict != "PASS"
+
+
+def test_f15_rejects_composition_id_collision_with_input_audit_id():
+    from dataclasses import replace
+    from core.schema import CompositionConclusion
+
+    results, request = _f15_fixture(CompositionConclusion.BOUNDED_SUMMARY)
+    request = replace(request, composition_id=results[0].audit_id)
+    r = run(
+        "F15-SELF-REFERENCE-COLLISION",
+        AuditInput(prior_audit_results=results, composition_requests=(request,)),
+        rule_versions=("M0-1.0", "M0-F15-1.0"),
+    )
+    assert "UNKNOWN" in r.violations
+    assert r.verdict != "PASS"
