@@ -1279,3 +1279,69 @@ def test_f15_duplicate_participant_irg_label_is_unknown():
     assert r.verdict == "FAIL"
     assert "UNKNOWN" in r.violations
     assert "COMPOSITION_FORBIDDEN" not in r.violations
+
+
+def test_f15_composition_summary_is_not_admissible_assessment_evidence():
+    from core.schema import Assessment, CompositionConclusion, Reference
+
+    source_results, request = _f15_fixture(CompositionConclusion.LOCAL_RESULT_SUMMARY)
+    summary_result = run(
+        "F15-SUMMARY-SOURCE",
+        AuditInput(prior_audit_results=source_results, composition_requests=(request,)),
+        rule_versions=("M0-1.0", "M0-F15-1.0"),
+    )
+    assessment = Assessment(
+        assessment_id="ASSESSMENT-USES-COMPOSITION-SUMMARY",
+        assessment_version="1",
+        rule_version="ASSESSMENT-RULE-1",
+        admissible_evidence_refs=(Reference("F15-COMPOSITION", "COMPOSITION_SUMMARY"),),
+        condition_evaluation="Treat the summary as evidence",
+        assessment_basis="Adversarial F15 regression",
+        scope="F15-I6",
+    )
+    r = run(
+        "F15-SUMMARY-AS-EVIDENCE",
+        AuditInput(assessments=(assessment,), prior_audit_results=(summary_result,)),
+        rule_versions=("M0-1.0", "M0-F15-1.0"),
+    )
+    assert r.verdict == "FAIL"
+    assert "COMPOSITION_FORBIDDEN" in r.violations
+
+
+def test_f15_summary_cannot_be_wrapped_as_observation_evidence():
+    from core.schema import Assessment, CompositionConclusion, IndependenceStatus, Reference
+
+    source_results, request = _f15_fixture(CompositionConclusion.LOCAL_RESULT_SUMMARY)
+    summary_result = run(
+        "F15-SUMMARY-SOURCE-WRAPPED",
+        AuditInput(prior_audit_results=source_results, composition_requests=(request,)),
+        rule_versions=("M0-1.0", "M0-F15-1.0"),
+    )
+    wrapped = Evidence(
+        evidence_id="EVIDENCE-WRAPPED-SUMMARY",
+        observation_refs=(Reference("F15-COMPOSITION", "COMPOSITION_SUMMARY"),),
+        evidence_level="OBSERVATION",
+        independence_status=IndependenceStatus.DEPENDENT,
+        derivation_reference=Reference("DER-WRAPPED-SUMMARY", "DERIVATION"),
+        scope="Adversarial F15 regression",
+    )
+    assessment = Assessment(
+        assessment_id="ASSESSMENT-WRAPPED-SUMMARY",
+        assessment_version="1",
+        rule_version="ASSESSMENT-RULE-1",
+        admissible_evidence_refs=(Reference(wrapped.evidence_id, "EVIDENCE"),),
+        condition_evaluation="Treat a wrapper around the summary as evidence",
+        assessment_basis="Adversarial F15 regression",
+        scope="F15-I6",
+    )
+    r = run(
+        "F15-WRAPPED-SUMMARY-AS-EVIDENCE",
+        AuditInput(
+            assessments=(assessment,),
+            evidence=(wrapped,),
+            prior_audit_results=(summary_result,),
+        ),
+        rule_versions=("M0-1.0", "M0-F15-1.0"),
+    )
+    assert r.verdict == "FAIL"
+    assert "COMPOSITION_FORBIDDEN" in r.violations
