@@ -1009,7 +1009,7 @@ def test_f11_ambiguous_duplicate_evidence_ids_remain_unknown():
 
 def _f15_fixture(conclusion):
     from core.schema import (
-        AuditResult, CompositionParticipantResult, CompositionRequest,
+        AuditResult, CompositionConclusion, CompositionParticipantResult, CompositionRequest,
     )
 
     results = tuple(
@@ -1033,8 +1033,16 @@ def _f15_fixture(conclusion):
             CompositionParticipantResult(f"IRG-{i:02d}", f"F15-AUDIT-{i}")
             for i in range(1, 6)
         ),
-        composition_rule_id="M0-F15",
-        composition_rule_version="M0-F15-1.0",
+        composition_rule_id=(
+            "M0-F15-LOCAL-SUMMARY"
+            if conclusion == CompositionConclusion.LOCAL_RESULT_SUMMARY
+            else "M0-F15"
+        ),
+        composition_rule_version=(
+            "1.0"
+            if conclusion == CompositionConclusion.LOCAL_RESULT_SUMMARY
+            else "M0-F15-1.0"
+        ),
         temporal_context="F15-TEST-SNAPSHOT",
         requested_conclusion=conclusion,
         limitations="Local structure does not establish truth or ontology",
@@ -1059,7 +1067,7 @@ def test_f15_forbids_global_truth_from_five_local_results():
 def test_f15_allows_bounded_summary():
     from core.schema import CompositionConclusion
 
-    results, request = _f15_fixture(CompositionConclusion.BOUNDED_SUMMARY)
+    results, request = _f15_fixture(CompositionConclusion.LOCAL_RESULT_SUMMARY)
     r = run(
         "F15-BOUNDED-SUMMARY",
         AuditInput(prior_audit_results=results, composition_requests=(request,)),
@@ -1067,13 +1075,59 @@ def test_f15_allows_bounded_summary():
     )
     assert r.verdict == "PASS"
     assert "COMPOSITION_FORBIDDEN" not in r.violations
+    assert len(r.composition_summaries) == 1
+    summary = r.composition_summaries[0]
+    assert summary.composition_id == "F15-COMPOSITION"
+    assert summary.summary_rule_id == "M0-F15-LOCAL-SUMMARY"
+    assert summary.summary_rule_version == "1.0"
+    assert len(summary.records) == 5
+    assert summary.verdict_counts == (("PASS", 5),)
+    assert all(record.declared_irg_id.startswith("IRG-") for record in summary.records)
+    assert "does not establish Claim truth" in summary.limitations
+
+
+def test_f15_supplied_results_only_emits_subset_summary():
+    from dataclasses import replace
+    from core.schema import CompositionConclusion, CompositionInputScope
+
+    results, request = _f15_fixture(CompositionConclusion.LOCAL_RESULT_SUMMARY)
+    request = replace(
+        request,
+        participant_results=request.participant_results[:2],
+        requested_input_scope=CompositionInputScope.SUPPLIED_RESULTS_ONLY,
+    )
+    r = run(
+        "F15-SUPPLIED-RESULTS-SUBSET",
+        AuditInput(prior_audit_results=results, composition_requests=(request,)),
+        rule_versions=("M0-1.0", "M0-F15-1.0"),
+    )
+    assert r.verdict == "PASS"
+    assert len(r.composition_summaries) == 1
+    assert len(r.composition_summaries[0].records) == 2
+    assert r.composition_summaries[0].verdict_counts == (("PASS", 2),)
+
+
+def test_f15_legacy_bounded_summary_label_is_not_accepted():
+    from dataclasses import replace
+    from core.schema import CompositionConclusion
+
+    results, request = _f15_fixture(CompositionConclusion.LOCAL_RESULT_SUMMARY)
+    request = replace(request, requested_conclusion=CompositionConclusion.BOUNDED_SUMMARY)
+    r = run(
+        "F15-LEGACY-BOUNDED-SUMMARY",
+        AuditInput(prior_audit_results=results, composition_requests=(request,)),
+        rule_versions=("M0-1.0", "M0-F15-1.0"),
+    )
+    assert r.verdict == "FAIL"
+    assert "UNKNOWN" in r.violations
+    assert r.composition_summaries == ()
 
 
 def test_f15_missing_participant_result_is_unknown():
     from dataclasses import replace
     from core.schema import CompositionConclusion
 
-    results, request = _f15_fixture(CompositionConclusion.BOUNDED_SUMMARY)
+    results, request = _f15_fixture(CompositionConclusion.LOCAL_RESULT_SUMMARY)
     request = replace(request, participant_results=request.participant_results[:-1])
     r = run(
         "F15-MISSING-PARTICIPANT",
@@ -1088,7 +1142,7 @@ def test_f15_rejects_noncanonical_irgs_for_five_result_summary():
     from dataclasses import replace
     from core.schema import CompositionConclusion, CompositionParticipantResult
 
-    results, request = _f15_fixture(CompositionConclusion.BOUNDED_SUMMARY)
+    results, request = _f15_fixture(CompositionConclusion.LOCAL_RESULT_SUMMARY)
     request = replace(
         request,
         participant_results=tuple(
@@ -1109,7 +1163,7 @@ def test_f15_rejects_unrecognized_composition_rule_id():
     from dataclasses import replace
     from core.schema import CompositionConclusion
 
-    results, request = _f15_fixture(CompositionConclusion.BOUNDED_SUMMARY)
+    results, request = _f15_fixture(CompositionConclusion.LOCAL_RESULT_SUMMARY)
     request = replace(request, composition_rule_id="CALLER-DEFINED-ALLOW-ALL")
     r = run(
         "F15-UNRECOGNIZED-RULE-ID",
@@ -1124,7 +1178,7 @@ def test_f15_rejects_composition_id_collision_with_input_audit_id():
     from dataclasses import replace
     from core.schema import CompositionConclusion
 
-    results, request = _f15_fixture(CompositionConclusion.BOUNDED_SUMMARY)
+    results, request = _f15_fixture(CompositionConclusion.LOCAL_RESULT_SUMMARY)
     request = replace(request, composition_id=results[0].audit_id)
     r = run(
         "F15-SELF-REFERENCE-COLLISION",
@@ -1190,7 +1244,7 @@ def test_f15_duplicate_participant_audit_id_is_unknown():
     from dataclasses import replace
     from core.schema import CompositionConclusion
 
-    results, request = _f15_fixture(CompositionConclusion.BOUNDED_SUMMARY)
+    results, request = _f15_fixture(CompositionConclusion.LOCAL_RESULT_SUMMARY)
     participants = list(request.participant_results)
     participants[-1] = replace(participants[-1], audit_id=participants[0].audit_id)
     request = replace(request, participant_results=tuple(participants))
@@ -1209,7 +1263,7 @@ def test_f15_duplicate_participant_irg_label_is_unknown():
     from dataclasses import replace
     from core.schema import CompositionConclusion, CompositionParticipantResult
 
-    results, request = _f15_fixture(CompositionConclusion.BOUNDED_SUMMARY)
+    results, request = _f15_fixture(CompositionConclusion.LOCAL_RESULT_SUMMARY)
     participants = list(request.participant_results)
     participants[-1] = CompositionParticipantResult(
         irg_id=participants[0].irg_id,
