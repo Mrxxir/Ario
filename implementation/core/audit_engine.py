@@ -259,18 +259,14 @@ class AuditEngine:
         }
 
         for request in request_list:
-            if (
-                request.composition_rule_id != supported_rule_id
-                or request.composition_rule_version != supported_rule_version
-                or supported_rule_version not in rule_versions
-            ):
-                violations.append("UNKNOWN")
-                continue
-
             participants = request.participant_results
             irg_ids = [p.irg_id for p in participants]
             audit_ids = [p.audit_id for p in participants]
 
+            # Resolve structural ambiguity before classifying the requested
+            # semantic conclusion. A forbidden truth request must not be
+            # downgraded to UNKNOWN merely by changing the caller-supplied
+            # composition rule ID/version, provided F15 itself is declared.
             if (
                 len(participants) != 5
                 or set(irg_ids) != canonical_irg_ids
@@ -282,6 +278,24 @@ class AuditEngine:
                 continue
 
             if any(len(results_by_id.get(aid, [])) != 1 for aid in audit_ids):
+                violations.append("UNKNOWN")
+                continue
+
+            if supported_rule_version not in rule_versions:
+                violations.append("UNKNOWN")
+                continue
+
+            # F15-I1: direct local-result-to-Claim-truth escalation remains
+            # forbidden even if the caller supplies an unsupported rule ID
+            # or version. The declared F15 version is the governing firewall.
+            if request.requested_conclusion == CompositionConclusion.CLAIM_TRUTH:
+                violations.append("COMPOSITION_FORBIDDEN")
+                continue
+
+            if (
+                request.composition_rule_id != supported_rule_id
+                or request.composition_rule_version != supported_rule_version
+            ):
                 violations.append("UNKNOWN")
                 continue
 
