@@ -1351,3 +1351,30 @@ def test_f15_summary_cannot_be_wrapped_as_observation_evidence():
     )
     assert r.verdict == "FAIL"
     assert "COMPOSITION_FORBIDDEN" in r.violations
+
+
+def test_f15_audit_verdict_id_is_not_admissible_assessment_evidence():
+    from core.schema import Assessment, CompositionConclusion, Reference
+
+    source_results, request = _f15_fixture(CompositionConclusion.LOCAL_RESULT_SUMMARY)
+    summary_result = run(
+        "F15-AUDIT-VERDICT-SOURCE",
+        AuditInput(prior_audit_results=source_results, composition_requests=(request,)),
+        rule_versions=("M0-1.0", "M0-F15-1.0"),
+    )
+    assessment = Assessment(
+        assessment_id="ASSESSMENT-USES-AUDIT-VERDICT",
+        assessment_version="1",
+        rule_version="ASSESSMENT-RULE-1",
+        admissible_evidence_refs=(Reference(summary_result.audit_id, "AUDIT_RESULT"),),
+        condition_evaluation="Treat an audit verdict as evidence",
+        assessment_basis="Adversarial F15 regression",
+        scope="F15-I6",
+    )
+    r = run(
+        "F15-AUDIT-VERDICT-AS-EVIDENCE",
+        AuditInput(assessments=(assessment,), prior_audit_results=(summary_result,)),
+        rule_versions=("M0-1.0", "M0-F15-1.0"),
+    )
+    assert r.verdict == "FAIL"
+    assert "COMPOSITION_FORBIDDEN" in r.violations
