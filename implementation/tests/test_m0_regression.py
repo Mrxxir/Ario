@@ -1030,7 +1030,7 @@ def _f15_fixture(conclusion):
     request = CompositionRequest(
         composition_id="F15-COMPOSITION",
         participant_results=tuple(
-            CompositionParticipantResult(f"IRG-{i}", f"F15-AUDIT-{i}")
+            CompositionParticipantResult(f"IRG-{i:02d}", f"F15-AUDIT-{i}")
             for i in range(1, 6)
         ),
         composition_rule_id="M0-F15",
