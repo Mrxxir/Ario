@@ -556,6 +556,57 @@ class BoundedAgentTests(unittest.TestCase):
             self.assertIn("malformed JSONL", result["error"])
             self.assertFalse(result["automatic_resume"])
 
+    def test_history_inspection_requires_exact_declared_criterion_observations(self):
+        cases = {
+            "missing": [
+                {"event": "TASK_STARTED", "task_id": "X", "goal": "test",
+                 "success_criteria_ids": ["c1", "c2"]},
+                {"event": "GOAL_CRITERION_OBSERVED", "task_id": "X",
+                 "criterion_id": "c1", "status": "PASSED"},
+                {"event": "TASK_FINISHED", "task_id": "X", "status": "COMPLETED"},
+            ],
+            "duplicate": [
+                {"event": "TASK_STARTED", "task_id": "X", "goal": "test",
+                 "success_criteria_ids": ["c1"]},
+                {"event": "GOAL_CRITERION_OBSERVED", "task_id": "X",
+                 "criterion_id": "c1", "status": "PASSED"},
+                {"event": "GOAL_CRITERION_OBSERVED", "task_id": "X",
+                 "criterion_id": "c1", "status": "PASSED"},
+                {"event": "TASK_FINISHED", "task_id": "X", "status": "COMPLETED"},
+            ],
+            "extra": [
+                {"event": "TASK_STARTED", "task_id": "X", "goal": "test",
+                 "success_criteria_ids": ["c1"]},
+                {"event": "GOAL_CRITERION_OBSERVED", "task_id": "X",
+                 "criterion_id": "c1", "status": "PASSED"},
+                {"event": "GOAL_CRITERION_OBSERVED", "task_id": "X",
+                 "criterion_id": "c2", "status": "PASSED"},
+                {"event": "TASK_FINISHED", "task_id": "X", "status": "COMPLETED"},
+            ],
+            "criterion_without_start_contract": [
+                {"event": "TASK_STARTED", "task_id": "X", "goal": "test"},
+                {"event": "GOAL_CRITERION_OBSERVED", "task_id": "X",
+                 "criterion_id": "c1", "status": "PASSED"},
+                {"event": "TASK_FINISHED", "task_id": "X", "status": "COMPLETED"},
+            ],
+        }
+
+        for case_name, events in cases.items():
+            with self.subTest(case=case_name), tempfile.TemporaryDirectory() as directory:
+                ledger = Path(directory) / "audit.jsonl"
+                ledger.write_text(
+                    "\n".join(json.dumps(event) for event in events) + "\n",
+                    encoding="utf-8",
+                )
+                before = ledger.read_bytes()
+
+                result = inspect_task_history("X", ledger)
+
+                self.assertEqual(result["status"], "UNKNOWN")
+                self.assertFalse(result["automatic_resume"])
+                self.assertFalse(result["write_performed"])
+                self.assertEqual(ledger.read_bytes(), before)
+
     def test_stops_after_first_failed_observation(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
