@@ -152,4 +152,4 @@ F15 is accepted only when:
 - the full regression suite passes on the tested PR merge ref;
 - the implementation and its limits are recorded without altering the frozen pre-registration.
 
-**Current classification: SPECIFICATION DRAFT / IMPLEMENTATION PR #54 OPEN AND NOT MERGED / CI AT IMPLEMENTATION HEAD `1e822ade994e52d89b1f1a2c98dbe0ce4247606c`: 142 PASSED, 18 SUBTESTS PASSED / NO GLOBAL TRUTH CLAIM.**
+**Current classification: SPECIFICATION DRAFT / IMPLEMENTATION PR #54 OPEN AND NOT MERGED / CI AT IMPLEMENTATION HEAD `e13f5a0ec54369e4cf0a4bd917b0eb5d6f7fcf1b`: 144 PASSED, 18 SUBTESTS PASSED / NO GLOBAL TRUTH CLAIM.**
