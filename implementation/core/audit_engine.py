@@ -691,6 +691,14 @@ class AuditEngine:
                 reference_id = reference.reference_id
                 matches = evidence_by_id.get(reference_id, [])
 
+                if f15_enabled and reference.reference_type in {
+                    "AUDIT_RESULT",
+                    "COMPOSITION_REQUEST",
+                    "COMPOSITION_SUMMARY",
+                }:
+                    violations.append("COMPOSITION_FORBIDDEN")
+                    continue
+
                 if f15_enabled:
                     result_matches = audit_results_by_id.get(reference_id, [])
                     summary_count = summary_ids.get(reference_id, 0)
