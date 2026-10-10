@@ -1378,3 +1378,29 @@ def test_f15_audit_verdict_id_is_not_admissible_assessment_evidence():
     )
     assert r.verdict == "FAIL"
     assert "COMPOSITION_FORBIDDEN" in r.violations
+
+
+def test_f15_composition_request_id_is_not_admissible_assessment_evidence():
+    from core.schema import Assessment, CompositionConclusion, Reference
+
+    source_results, request = _f15_fixture(CompositionConclusion.LOCAL_RESULT_SUMMARY)
+    assessment = Assessment(
+        assessment_id="ASSESSMENT-USES-COMPOSITION-REQUEST",
+        assessment_version="1",
+        rule_version="ASSESSMENT-RULE-1",
+        admissible_evidence_refs=(Reference(request.composition_id, "COMPOSITION_REQUEST"),),
+        condition_evaluation="Treat the composition request as evidence",
+        assessment_basis="Adversarial F15 regression",
+        scope="F15-I6",
+    )
+    r = run(
+        "F15-COMPOSITION-REQUEST-AS-EVIDENCE",
+        AuditInput(
+            assessments=(assessment,),
+            prior_audit_results=source_results,
+            composition_requests=(request,),
+        ),
+        rule_versions=("M0-1.0", "M0-F15-1.0"),
+    )
+    assert r.verdict == "FAIL"
+    assert "COMPOSITION_FORBIDDEN" in r.violations
