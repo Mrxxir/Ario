@@ -2,7 +2,7 @@
 
 ## Status
 
-**DESIGN SPECIFICATION ONLY — NOT IMPLEMENTED — RUNTIME TESTS NOT PERFORMED — NO GLOBAL TRUTH CLAIM**
+**DESIGN SPECIFICATION — IMPLEMENTATION PROPOSED IN PR #54 — NOT MERGED TO MAIN — NO GLOBAL TRUTH CLAIM**
 
 This is a new, versioned design artifact on branch `research/f15-global-truth-firewall`. It does not modify the frozen pre-registration or retroactively rewrite the historical capability and acceptance records.
 
@@ -152,4 +152,4 @@ F15 is accepted only when:
 - the full regression suite passes on the tested PR merge ref;
 - the implementation and its limits are recorded without altering the frozen pre-registration.
 
-**Current classification: DESIGN SPECIFICATION ONLY / NOT IMPLEMENTED / NOT TESTED / NO GLOBAL TRUTH CLAIM.**
+**Current classification: SPECIFICATION DRAFT / IMPLEMENTATION PR #54 OPEN AND NOT MERGED / CI AT IMPLEMENTATION HEAD `6a07b18ef8a68ec9ef5d47ca89c6e9b40112d4e0`: 140 PASSED, 18 SUBTESTS PASSED / NO GLOBAL TRUTH CLAIM.**
