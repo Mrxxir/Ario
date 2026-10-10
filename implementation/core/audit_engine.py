@@ -333,6 +333,7 @@ class AuditEngine:
                 CompositionSummaryRecord(
                     audit_id=participant.audit_id,
                     declared_irg_id=participant.irg_id,
+                    declared_scope=participant.declared_scope,
                     verdict=results_by_id[participant.audit_id][0].verdict,
                     rule_versions=results_by_id[participant.audit_id][0].rule_versions,
                     configuration_id=results_by_id[participant.audit_id][0].configuration_id,
@@ -355,7 +356,7 @@ class AuditEngine:
                     scope=request.scope,
                     limitations=(
                         request.limitations
-                        + " Declared IRG labels are caller-supplied and are not independently authenticated."
+                        + " Declared IRG labels and per-record scopes are caller-supplied and are not independently authenticated."
                         + " This summary describes supplied audit-result records only; it does not establish Claim truth."
                     ),
                 )
