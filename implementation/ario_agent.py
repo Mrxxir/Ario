@@ -647,6 +647,7 @@ def _run_task_locked(task: dict, root: Path, ledger: Path) -> dict:
         "event": "TASK_STARTED",
         "task_id": task["task_id"],
         "goal": task["goal"],
+        "step_ids": [action["step_id"] for action in task["actions"]],
         "success_criteria_ids": [
             criterion["criterion_id"]
             for criterion in task.get("success_criteria", [])
@@ -898,6 +899,26 @@ def inspect_task_history(task_id: str, ledger_path: str | Path) -> dict:
                         "automatic_resume": False,
                         "write_performed": False,
                     }
+            declared_step_ids = start_event.get("step_ids")
+            observed_step_ids = [event.get("step_id") for event in steps]
+            valid_step_contract = (
+                isinstance(declared_step_ids, list)
+                and all(
+                    isinstance(item, str) and item.strip()
+                    for item in declared_step_ids
+                )
+                and len(declared_step_ids) == len(set(declared_step_ids))
+            )
+            if not valid_step_contract or observed_step_ids != declared_step_ids:
+                return {
+                    "task_id": task_id,
+                    "status": "UNKNOWN",
+                    "error": "step observations do not exactly match the start contract",
+                    "event_count": len(events),
+                    "automatic_resume": False,
+                    "write_performed": False,
+                }
+
         status = final_status
         next_state = "NONE_TERMINAL_TASK"
     else:
