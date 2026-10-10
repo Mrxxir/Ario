@@ -1404,3 +1404,38 @@ def test_f15_composition_request_id_is_not_admissible_assessment_evidence():
     )
     assert r.verdict == "FAIL"
     assert "COMPOSITION_FORBIDDEN" in r.violations
+
+
+def test_f15_mixed_local_verdicts_still_forbid_claim_truth():
+    from dataclasses import replace
+    from core.schema import CompositionConclusion
+
+    results, request = _f15_fixture(CompositionConclusion.CLAIM_TRUTH)
+    mixed_results = tuple(
+        replace(result, verdict="FAIL" if index == 1 else result.verdict)
+        for index, result in enumerate(results)
+    )
+    r = run(
+        "F15-MIXED-VERDICTS-CLAIM-TRUTH",
+        AuditInput(prior_audit_results=mixed_results, composition_requests=(request,)),
+        rule_versions=("M0-1.0", "M0-F15-1.0"),
+    )
+    assert r.verdict == "FAIL"
+    assert "COMPOSITION_FORBIDDEN" in r.violations
+    assert "UNKNOWN" not in r.violations
+
+
+def test_f15_summary_rule_version_is_exactly_gated():
+    from dataclasses import replace
+    from core.schema import CompositionConclusion
+
+    results, request = _f15_fixture(CompositionConclusion.LOCAL_RESULT_SUMMARY)
+    request = replace(request, composition_rule_version="2.0")
+    r = run(
+        "F15-SUMMARY-UNSUPPORTED-RULE-VERSION",
+        AuditInput(prior_audit_results=results, composition_requests=(request,)),
+        rule_versions=("M0-1.0", "M0-F15-1.0"),
+    )
+    assert r.verdict == "FAIL"
+    assert "UNKNOWN" in r.violations
+    assert r.composition_summaries == ()
