@@ -1478,3 +1478,31 @@ def test_f15_summary_cannot_be_smuggled_through_derivation_reference():
     )
     assert r.verdict == "FAIL"
     assert "COMPOSITION_FORBIDDEN" in r.violations
+
+
+def test_f15_assessment_rejects_forbidden_type_even_when_id_matches_evidence():
+    from core.schema import Assessment, Reference
+
+    real_evidence = evidence(
+        "EVIDENCE-REAL-01",
+        ("OBS-REAL-01",),
+        IndependenceStatus.DEPENDENT,
+    )
+    assessment = Assessment(
+        assessment_id="ASSESSMENT-TYPE-CONFUSION",
+        assessment_version="1",
+        rule_version="ASSESSMENT-RULE-1",
+        admissible_evidence_refs=(
+            Reference(real_evidence.evidence_id, "COMPOSITION_SUMMARY"),
+        ),
+        condition_evaluation="Attempt to relabel real evidence as a composition summary",
+        assessment_basis="Adversarial F15 reference-type confusion test",
+        scope="F15-I6",
+    )
+    r = run(
+        "F15-ASSESSMENT-REFERENCE-TYPE-CONFUSION",
+        AuditInput(assessments=(assessment,), evidence=(real_evidence,)),
+        rule_versions=("M0-1.0", "M0-F15-1.0"),
+    )
+    assert r.verdict == "FAIL"
+    assert "COMPOSITION_FORBIDDEN" in r.violations
