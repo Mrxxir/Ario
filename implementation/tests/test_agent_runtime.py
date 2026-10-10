@@ -403,6 +403,28 @@ class BoundedAgentTests(unittest.TestCase):
             self.assertEqual(result["observed_steps"][0]["step_id"], "s1")
             self.assertEqual(ledger.read_bytes(), before)
 
+    def test_history_inspection_accepts_real_completed_task_without_explicit_criteria(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "notes.txt").write_text("inspection only", encoding="utf-8")
+            ledger = root / "audit.jsonl"
+            task = self.task([{"step_id": "s1", "tool": "read_text", "path": "notes.txt"}])
+
+            execution = run_task(task, root, ledger)
+            self.assertEqual(execution["status"], "COMPLETED")
+
+            events = [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
+            started = next(event for event in events if event["event"] == "TASK_STARTED")
+            self.assertEqual(started["success_criteria_ids"], [])
+
+            ledger_before = ledger.read_bytes()
+            history = inspect_task_history(task["task_id"], ledger)
+            self.assertEqual(history["status"], "COMPLETED")
+            self.assertEqual(history["next_step_state"], "NONE_TERMINAL_TASK")
+            self.assertFalse(history["automatic_resume"])
+            self.assertFalse(history["write_performed"])
+            self.assertEqual(ledger.read_bytes(), ledger_before)
+
     def test_history_inspection_recognizes_terminal_task(self):
         with tempfile.TemporaryDirectory() as directory:
             ledger = Path(directory) / "audit.jsonl"
@@ -465,6 +487,56 @@ class BoundedAgentTests(unittest.TestCase):
                     self.assertFalse(result["write_performed"])
                     self.assertEqual(ledger.read_bytes(), before)
 
+    def test_history_inspection_requires_exact_declared_criterion_observations(self):
+        cases = {
+            "missing": [
+                {"event": "TASK_STARTED", "task_id": "X", "goal": "test",
+                 "success_criteria_ids": ["c1", "c2"]},
+                {"event": "GOAL_CRITERION_OBSERVED", "task_id": "X",
+                 "criterion_id": "c1", "status": "PASSED"},
+                {"event": "TASK_FINISHED", "task_id": "X", "status": "COMPLETED"},
+            ],
+            "duplicate": [
+                {"event": "TASK_STARTED", "task_id": "X", "goal": "test",
+                 "success_criteria_ids": ["c1"]},
+                {"event": "GOAL_CRITERION_OBSERVED", "task_id": "X",
+                 "criterion_id": "c1", "status": "PASSED"},
+                {"event": "GOAL_CRITERION_OBSERVED", "task_id": "X",
+                 "criterion_id": "c1", "status": "PASSED"},
+                {"event": "TASK_FINISHED", "task_id": "X", "status": "COMPLETED"},
+            ],
+            "extra": [
+                {"event": "TASK_STARTED", "task_id": "X", "goal": "test",
+                 "success_criteria_ids": ["c1"]},
+                {"event": "GOAL_CRITERION_OBSERVED", "task_id": "X",
+                 "criterion_id": "c1", "status": "PASSED"},
+                {"event": "GOAL_CRITERION_OBSERVED", "task_id": "X",
+                 "criterion_id": "c2", "status": "PASSED"},
+                {"event": "TASK_FINISHED", "task_id": "X", "status": "COMPLETED"},
+            ],
+            "criterion_without_start_contract": [
+                {"event": "TASK_STARTED", "task_id": "X", "goal": "test"},
+                {"event": "GOAL_CRITERION_OBSERVED", "task_id": "X",
+                 "criterion_id": "c1", "status": "PASSED"},
+                {"event": "TASK_FINISHED", "task_id": "X", "status": "COMPLETED"},
+            ],
+        }
+
+        for case_name, events in cases.items():
+            with self.subTest(case=case_name), tempfile.TemporaryDirectory() as directory:
+                ledger = Path(directory) / "audit.jsonl"
+                ledger.write_text(
+                    "\n".join(json.dumps(event) for event in events) + "\n",
+                    encoding="utf-8",
+                )
+                before = ledger.read_bytes()
+
+                result = inspect_task_history("X", ledger)
+
+                self.assertEqual(result["status"], "UNKNOWN")
+                self.assertFalse(result["automatic_resume"])
+                self.assertFalse(result["write_performed"])
+                self.assertEqual(ledger.read_bytes(), before)
     def test_history_inspection_fails_closed_on_malformed_ledger(self):
         with tempfile.TemporaryDirectory() as directory:
             ledger = Path(directory) / "audit.jsonl"

@@ -210,6 +210,25 @@ class LocalOllamaPlannerTests(unittest.TestCase):
                 request_plan("Inspect repository", directory)
             self.assertEqual(urlopen.call_count, 2)
 
+    def test_planner_rejects_symlink_source_before_resolving_target(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with patch.object(Path, "is_symlink", return_value=True):
+                with patch.object(ario_planner, "_inside") as inside:
+                    with self.assertRaisesRegex(AgentRequestError, "refusing symbolic link"):
+                        ario_planner._read_action_chunks(root, "source.py", "step")
+                    inside.assert_not_called()
+
+    def test_planner_rejects_single_line_exceeding_read_byte_limit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            oversized = root / "oversized.txt"
+            oversized.write_bytes(
+                b"x" * (ario_planner.MAX_READ_BYTES + 1) + b"\n"
+            )
+            with self.assertRaisesRegex(AgentRequestError, "line longer than"):
+                ario_planner._read_action_chunks(root, "oversized.txt", "step")
+
     @patch("ario_planner.urllib.request.urlopen")
     def test_planner_builds_complete_bounded_chunks_for_large_source_files(self, urlopen):
         with tempfile.TemporaryDirectory() as directory:
