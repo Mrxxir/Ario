@@ -122,7 +122,10 @@ class IndependenceStatus(str, Enum):
 
 
 class CompositionConclusion(str, Enum):
+    # BOUNDED_SUMMARY is retained as a legacy input label but is not accepted
+    # by the current F15 contract. Use LOCAL_RESULT_SUMMARY instead.
     BOUNDED_SUMMARY = "BOUNDED_SUMMARY"
+    LOCAL_RESULT_SUMMARY = "LOCAL_RESULT_SUMMARY"
     GLOBAL_TRUTH = "GLOBAL_TRUTH"
     CLAIM_TRUTH = "CLAIM_TRUTH"
     SAME_ENTITY = "SAME_ENTITY"
@@ -130,16 +133,24 @@ class CompositionConclusion(str, Enum):
     CONSCIOUSNESS = "CONSCIOUSNESS"
 
 
+class CompositionInputScope(str, Enum):
+    SUPPLIED_RESULTS_ONLY = "SUPPLIED_RESULTS_ONLY"
+    ALL_FIVE_IRGS = "ALL_FIVE_IRGS"
+
+
 @dataclass(frozen=True)
 class CompositionParticipantResult:
     irg_id: str
     audit_id: str
+    declared_scope: str = "UNSPECIFIED"
 
     def __post_init__(self) -> None:
         if not self.irg_id or not self.irg_id.strip():
             raise ValueError("irg_id must be non-empty")
         if not self.audit_id or not self.audit_id.strip():
             raise ValueError("audit_id must be non-empty")
+        if not self.declared_scope or not self.declared_scope.strip():
+            raise ValueError("declared_scope must be non-empty")
 
 
 @dataclass(frozen=True)
@@ -152,6 +163,7 @@ class CompositionRequest:
     requested_conclusion: CompositionConclusion
     limitations: str
     scope: str
+    requested_input_scope: CompositionInputScope = CompositionInputScope.ALL_FIVE_IRGS
 
     def __post_init__(self) -> None:
         for name in (
@@ -166,6 +178,38 @@ class CompositionRequest:
             raise ValueError("participant_results must be non-empty")
         if not isinstance(self.requested_conclusion, CompositionConclusion):
             raise ValueError("requested_conclusion must be typed")
+        if not isinstance(self.requested_input_scope, CompositionInputScope):
+            raise ValueError("requested_input_scope must be typed")
+
+
+@dataclass(frozen=True)
+class CompositionSummaryRecord:
+    audit_id: str
+    declared_irg_id: str
+    declared_scope: str
+    verdict: str
+    rule_versions: tuple[str, ...]
+    configuration_id: str
+
+
+@dataclass(frozen=True)
+class CompositionSummary:
+    composition_id: str
+    summary_rule_id: str
+    summary_rule_version: str
+    requested_input_scope: CompositionInputScope
+    records: tuple[CompositionSummaryRecord, ...]
+    verdict_counts: tuple[tuple[str, int], ...]
+    scope: str
+    limitations: str
+
+    def __post_init__(self) -> None:
+        for name in ("composition_id", "summary_rule_id", "summary_rule_version", "scope", "limitations"):
+            value = getattr(self, name)
+            if not value or not value.strip():
+                raise ValueError(f"{name} must be non-empty")
+        if not self.records:
+            raise ValueError("records must be non-empty")
 
 
 @dataclass(frozen=True)
@@ -289,6 +333,7 @@ class AuditResult:
     violations: tuple[str, ...]
     verdict: str
     verdict_basis: str
+    composition_summaries: tuple[CompositionSummary, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.audit_id or not self.audit_id.strip():
