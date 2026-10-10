@@ -403,17 +403,99 @@ class BoundedAgentTests(unittest.TestCase):
             self.assertEqual(result["observed_steps"][0]["step_id"], "s1")
             self.assertEqual(ledger.read_bytes(), before)
 
+    def test_history_inspection_accepts_real_completed_task_without_explicit_criteria(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "notes.txt").write_text("inspection only", encoding="utf-8")
+            ledger = root / "audit.jsonl"
+            task = self.task([{"step_id": "s1", "tool": "read_text", "path": "notes.txt"}])
+
+            execution = run_task(task, root, ledger)
+            self.assertEqual(execution["status"], "COMPLETED")
+
+            events = [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
+            started = next(event for event in events if event["event"] == "TASK_STARTED")
+            self.assertEqual(started["success_criteria_ids"], [])
+            self.assertEqual(started["step_ids"], ["s1"])
+
+            ledger_before = ledger.read_bytes()
+            history = inspect_task_history(task["task_id"], ledger)
+            self.assertEqual(history["status"], "COMPLETED")
+            self.assertEqual(history["next_step_state"], "NONE_TERMINAL_TASK")
+            self.assertFalse(history["automatic_resume"])
+            self.assertFalse(history["write_performed"])
+            self.assertEqual(ledger.read_bytes(), ledger_before)
+
     def test_history_inspection_recognizes_terminal_task(self):
         with tempfile.TemporaryDirectory() as directory:
             ledger = Path(directory) / "audit.jsonl"
-            ledger.write_text("\n".join([
-                json.dumps({"event": "TASK_STARTED", "task_id": "DONE-1", "goal": "inspect"}),
-                json.dumps({"event": "TASK_FINISHED", "task_id": "DONE-1", "status": "COMPLETED"}),
-            ]) + "\n", encoding="utf-8")
+            events = [
+                {"event": "TASK_STARTED", "task_id": "DONE-1",
+                 "goal": "inspect", "step_ids": ["s1"],
+                 "success_criteria_ids": []},
+                {"event": "STEP_OBSERVED", "task_id": "DONE-1",
+                 "step_id": "s1", "tool": "read_text",
+                 "status": "SUCCEEDED"},
+                {"event": "TASK_FINISHED", "task_id": "DONE-1",
+                 "status": "COMPLETED"},
+            ]
+            ledger.write_text(
+                "\n".join(json.dumps(event) for event in events) + "\n",
+                encoding="utf-8",
+            )
             result = inspect_task_history("DONE-1", ledger)
             self.assertEqual(result["status"], "COMPLETED")
             self.assertEqual(result["next_step_state"], "NONE_TERMINAL_TASK")
             self.assertFalse(result["automatic_resume"])
+
+    def test_history_inspection_requires_exact_declared_step_observations(self):
+        cases = [
+            ("missing", ["s1"], []),
+            ("duplicate", ["s1"], ["s1", "s1"]),
+            ("extra", ["s1"], ["s1", "s2"]),
+            ("out_of_order", ["s1", "s2"], ["s2", "s1"]),
+            ("legacy_without_contract", None, []),
+        ]
+        for label, declared, observed in cases:
+            with self.subTest(case=label), tempfile.TemporaryDirectory() as directory:
+                ledger = Path(directory) / "audit.jsonl"
+                started = {
+                    "event": "TASK_STARTED",
+                    "task_id": "STEP-CONTRACT",
+                    "goal": "inspect",
+                    "success_criteria_ids": [],
+                }
+                if declared is not None:
+                    started["step_ids"] = declared
+
+                events = [started]
+                for step_id in observed:
+                    events.append({
+                        "event": "STEP_OBSERVED",
+                        "task_id": "STEP-CONTRACT",
+                        "step_id": step_id,
+                        "tool": "read_text",
+                        "status": "SUCCEEDED",
+                    })
+                events.append({
+                    "event": "TASK_FINISHED",
+                    "task_id": "STEP-CONTRACT",
+                    "status": "COMPLETED",
+                })
+                ledger.write_text(
+                    "\n".join(json.dumps(event) for event in events) + "\n",
+                    encoding="utf-8",
+                )
+                before = ledger.read_bytes()
+                result = inspect_task_history("STEP-CONTRACT", ledger)
+                self.assertEqual(result["status"], "UNKNOWN")
+                self.assertEqual(
+                    result["error"],
+                    "step observations do not exactly match the start contract",
+                )
+                self.assertFalse(result["automatic_resume"])
+                self.assertFalse(result["write_performed"])
+                self.assertEqual(ledger.read_bytes(), before)
 
     def test_history_inspection_rejects_contradictory_completion_and_event_order(self):
         cases = {
