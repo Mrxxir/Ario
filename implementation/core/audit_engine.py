@@ -236,11 +236,19 @@ class AuditEngine:
         rule_versions: tuple[str, ...],
     ) -> list[str]:
         violations: list[str] = []
-        supported_rule = "M0-F15-1.0"
+        supported_rule_id = "M0-F15"
+        supported_rule_version = "M0-F15-1.0"
+        canonical_irg_ids = {f"IRG-{index:02d}" for index in range(1, 6)}
         results_by_id: dict[str, list[AuditResult]] = {}
+        request_list = tuple(requests)
+        request_id_counts: dict[str, int] = {}
 
         for result in prior_audit_results:
             results_by_id.setdefault(result.audit_id, []).append(result)
+        for request in request_list:
+            request_id_counts[request.composition_id] = (
+                request_id_counts.get(request.composition_id, 0) + 1
+            )
 
         forbidden = {
             CompositionConclusion.GLOBAL_TRUTH,
@@ -250,10 +258,11 @@ class AuditEngine:
             CompositionConclusion.CONSCIOUSNESS,
         }
 
-        for request in requests:
+        for request in request_list:
             if (
-                request.composition_rule_version != supported_rule
-                or supported_rule not in rule_versions
+                request.composition_rule_id != supported_rule_id
+                or request.composition_rule_version != supported_rule_version
+                or supported_rule_version not in rule_versions
             ):
                 violations.append("UNKNOWN")
                 continue
@@ -264,8 +273,10 @@ class AuditEngine:
 
             if (
                 len(participants) != 5
-                or len(set(irg_ids)) != 5
+                or set(irg_ids) != canonical_irg_ids
                 or len(set(audit_ids)) != 5
+                or request_id_counts[request.composition_id] != 1
+                or request.composition_id in results_by_id
             ):
                 violations.append("UNKNOWN")
                 continue
