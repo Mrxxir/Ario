@@ -197,6 +197,7 @@ class AuditEngine:
                     artifacts.evidence,
                     artifacts.prior_audit_results,
                     rule_versions,
+                    composition_requests=artifacts.composition_requests,
                 )
             )
             composition_violations, composition_summaries = (
@@ -641,6 +642,8 @@ class AuditEngine:
         evidence: Iterable[Evidence],
         prior_audit_results: Iterable[AuditResult] = (),
         rule_versions: tuple[str, ...] = (),
+        *,
+        composition_requests: Iterable[CompositionRequest] = (),
     ) -> list[str]:
         evidence_by_id: dict[str, list[Evidence]] = {}
         for item in evidence:
@@ -653,6 +656,11 @@ class AuditEngine:
         f15_enabled = "M0-F15-1.0" in rule_versions
         audit_results_by_id: dict[str, list[AuditResult]] = {}
         summary_ids: dict[str, int] = {}
+        request_ids: dict[str, int] = {}
+        for request in composition_requests:
+            request_ids[request.composition_id] = (
+                request_ids.get(request.composition_id, 0) + 1
+            )
         if f11_enabled or f15_enabled:
             for result in prior_audit_results:
                 audit_results_by_id.setdefault(result.audit_id, []).append(result)
@@ -671,13 +679,22 @@ class AuditEngine:
                 if f15_enabled:
                     result_matches = audit_results_by_id.get(reference_id, [])
                     summary_count = summary_ids.get(reference_id, 0)
-                    if (result_matches or summary_count) and matches:
+                    request_count = request_ids.get(reference_id, 0)
+                    if (result_matches or summary_count or request_count) and matches:
                         violations.append("UNKNOWN")
                         continue
-                    if len(result_matches) > 1 or summary_count > 1:
+                    if (
+                        len(result_matches) > 1
+                        or summary_count > 1
+                        or request_count > 1
+                    ):
                         violations.append("UNKNOWN")
                         continue
-                    if len(result_matches) == 1 or summary_count == 1:
+                    if (
+                        len(result_matches) == 1
+                        or summary_count == 1
+                        or request_count == 1
+                    ):
                         violations.append("COMPOSITION_FORBIDDEN")
                         continue
 
