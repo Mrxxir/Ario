@@ -178,7 +178,12 @@ class AuditEngine:
                 self._check_retrieval(artifacts.retrieval_events)
             )
             violations.extend(
-                self._check_evidence(artifacts.evidence)
+                self._check_evidence(
+                    artifacts.evidence,
+                    prior_audit_results=artifacts.prior_audit_results,
+                    composition_requests=artifacts.composition_requests,
+                    rule_versions=rule_versions,
+                )
             )
             violations.extend(
                 self._check_temporal_relations(
@@ -434,9 +439,25 @@ class AuditEngine:
     @staticmethod
     def _check_evidence(
         evidence: Iterable[Evidence],
+        *,
+        prior_audit_results: Iterable[AuditResult] = (),
+        composition_requests: Iterable[CompositionRequest] = (),
+        rule_versions: tuple[str, ...] = (),
     ) -> list[str]:
         evidence_items = tuple(evidence)
         violations: list[str] = []
+        f15_enabled = "M0-F15-1.0" in rule_versions
+        summary_ids = {
+            summary.composition_id
+            for result in prior_audit_results
+            for summary in result.composition_summaries
+        }
+        request_ids = {request.composition_id for request in composition_requests}
+        forbidden_reference_types = {
+            "AUDIT_RESULT",
+            "COMPOSITION_REQUEST",
+            "COMPOSITION_SUMMARY",
+        }
 
         observation_owners: dict[str, list[Evidence]] = {}
 
@@ -445,6 +466,14 @@ class AuditEngine:
 
             for reference in item.observation_refs:
                 observation_id = reference.reference_id
+
+                if f15_enabled and (
+                    reference.reference_type in forbidden_reference_types
+                    or observation_id in summary_ids
+                    or observation_id in request_ids
+                ):
+                    violations.append("COMPOSITION_FORBIDDEN")
+                    continue
 
                 if observation_id in seen_in_item:
                     continue
@@ -617,10 +646,16 @@ class AuditEngine:
         # versioned F05/F07 behavior. Without F11, legacy assessment resolution
         # remains unchanged and an audit-result-only ID is simply inadmissible.
         f11_enabled = "M0-F11-1.0" in rule_versions
+        f15_enabled = "M0-F15-1.0" in rule_versions
         audit_results_by_id: dict[str, list[AuditResult]] = {}
-        if f11_enabled:
+        summary_ids: dict[str, int] = {}
+        if f11_enabled or f15_enabled:
             for result in prior_audit_results:
                 audit_results_by_id.setdefault(result.audit_id, []).append(result)
+                for summary in result.composition_summaries:
+                    summary_ids[summary.composition_id] = (
+                        summary_ids.get(summary.composition_id, 0) + 1
+                    )
 
         violations: list[str] = []
 
@@ -628,6 +663,18 @@ class AuditEngine:
             for reference in assessment.admissible_evidence_refs:
                 reference_id = reference.reference_id
                 matches = evidence_by_id.get(reference_id, [])
+
+                if f15_enabled:
+                    summary_count = summary_ids.get(reference_id, 0)
+                    if summary_count and matches:
+                        violations.append("UNKNOWN")
+                        continue
+                    if summary_count > 1:
+                        violations.append("UNKNOWN")
+                        continue
+                    if summary_count == 1:
+                        violations.append("COMPOSITION_FORBIDDEN")
+                        continue
 
                 if f11_enabled:
                     result_matches = audit_results_by_id.get(reference_id, [])
