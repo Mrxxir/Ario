@@ -643,7 +643,17 @@ def _run_task_locked(task: dict, root: Path, ledger: Path) -> dict:
             "the natural-language goal has no independent final acceptance check."
         ),
     }
-    _append_event(ledger, {"event": "TASK_STARTED", "task_id": task["task_id"], "goal": task["goal"], "timestamp": started})
+    _append_event(ledger, {
+        "event": "TASK_STARTED",
+        "task_id": task["task_id"],
+        "goal": task["goal"],
+        "step_ids": [action["step_id"] for action in task["actions"]],
+        "success_criteria_ids": [
+            criterion["criterion_id"]
+            for criterion in task.get("success_criteria", [])
+        ],
+        "timestamp": started,
+    })
     for action in task["actions"]:
         step = {"step_id": action["step_id"], "tool": action["tool"], "status": "RUNNING"}
         try:
@@ -853,6 +863,60 @@ def inspect_task_history(task_id: str, ledger_path: str | Path) -> dict:
                 return {"task_id": task_id, "status": "UNKNOWN",
                         "error": "completed task has failed or unrecognized goal criteria",
                         "event_count": len(events), "automatic_resume": False, "write_performed": False}
+
+            start_event = starts[0]
+            if "success_criteria_ids" not in start_event:
+                if criteria:
+                    return {
+                        "task_id": task_id,
+                        "status": "UNKNOWN",
+                        "error": "goal criterion observations exist without a start contract",
+                        "event_count": len(events),
+                        "automatic_resume": False,
+                        "write_performed": False,
+                    }
+            else:
+                declared_ids = start_event.get("success_criteria_ids")
+                valid_contract = (
+                    isinstance(declared_ids, list)
+                    and all(
+                        isinstance(item, str) and item.strip()
+                        for item in declared_ids
+                    )
+                    and len(declared_ids) == len(set(declared_ids))
+                )
+                observed_ids = [
+                    event.get("criterion_id") for event in criteria
+                ]
+                if not valid_contract or observed_ids != declared_ids:
+                    return {
+                        "task_id": task_id,
+                        "status": "UNKNOWN",
+                        "error": "goal criterion observations do not exactly match the start contract",
+                        "event_count": len(events),
+                        "automatic_resume": False,
+                        "write_performed": False,
+                    }
+            declared_step_ids = start_event.get("step_ids")
+            observed_step_ids = [event.get("step_id") for event in steps]
+            valid_step_contract = (
+                isinstance(declared_step_ids, list)
+                and all(
+                    isinstance(item, str) and item.strip()
+                    for item in declared_step_ids
+                )
+                and len(declared_step_ids) == len(set(declared_step_ids))
+            )
+            if not valid_step_contract or observed_step_ids != declared_step_ids:
+                return {
+                    "task_id": task_id,
+                    "status": "UNKNOWN",
+                    "error": "step observations do not exactly match the start contract",
+                    "event_count": len(events),
+                    "automatic_resume": False,
+                    "write_performed": False,
+                }
+
         status = final_status
         next_state = "NONE_TERMINAL_TASK"
     else:
