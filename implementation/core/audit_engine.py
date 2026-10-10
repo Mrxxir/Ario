@@ -468,6 +468,21 @@ class AuditEngine:
         for item in evidence_items:
             seen_in_item: set[str] = set()
 
+            # F15 applies to every typed reference carried by an evidence
+            # wrapper, not only observation_refs. Otherwise a composition
+            # artifact can be smuggled through derivation_reference and the
+            # wrapper can then be cited as ordinary evidence.
+            if f15_enabled and item.derivation_reference is not None:
+                reference = item.derivation_reference
+                reference_id = reference.reference_id
+                if (
+                    reference.reference_type in forbidden_reference_types
+                    or reference_id in summary_ids
+                    or reference_id in audit_result_ids
+                    or reference_id in request_ids
+                ):
+                    violations.append("COMPOSITION_FORBIDDEN")
+
             for reference in item.observation_refs:
                 observation_id = reference.reference_id
 

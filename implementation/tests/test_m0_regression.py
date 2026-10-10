@@ -1439,3 +1439,42 @@ def test_f15_summary_rule_version_is_exactly_gated():
     assert r.verdict == "FAIL"
     assert "UNKNOWN" in r.violations
     assert r.composition_summaries == ()
+
+
+def test_f15_summary_cannot_be_smuggled_through_derivation_reference():
+    from core.schema import Assessment, CompositionConclusion, IndependenceStatus, Reference
+
+    source_results, request = _f15_fixture(CompositionConclusion.LOCAL_RESULT_SUMMARY)
+    summary_result = run(
+        "F15-DERIVATION-SUMMARY-SOURCE",
+        AuditInput(prior_audit_results=source_results, composition_requests=(request,)),
+        rule_versions=("M0-1.0", "M0-F15-1.0"),
+    )
+    wrapped = Evidence(
+        evidence_id="EVIDENCE-DERIVATION-WRAPPER",
+        observation_refs=(Reference("UNRELATED-OBSERVATION-01", "OBSERVATION"),),
+        evidence_level="OBSERVATION",
+        independence_status=IndependenceStatus.DEPENDENT,
+        derivation_reference=Reference("F15-COMPOSITION", "COMPOSITION_SUMMARY"),
+        scope="Adversarial F15 derivation-reference smuggling test",
+    )
+    assessment = Assessment(
+        assessment_id="ASSESSMENT-DERIVATION-WRAPPER",
+        assessment_version="1",
+        rule_version="ASSESSMENT-RULE-1",
+        admissible_evidence_refs=(Reference(wrapped.evidence_id, "EVIDENCE"),),
+        condition_evaluation="Treat a wrapper whose derivation points to the summary as evidence",
+        assessment_basis="Adversarial F15 regression",
+        scope="F15-I6",
+    )
+    r = run(
+        "F15-DERIVATION-REFERENCE-SUMMARY-SMUGGLING",
+        AuditInput(
+            assessments=(assessment,),
+            evidence=(wrapped,),
+            prior_audit_results=(summary_result,),
+        ),
+        rule_versions=("M0-1.0", "M0-F15-1.0"),
+    )
+    assert r.verdict == "FAIL"
+    assert "COMPOSITION_FORBIDDEN" in r.violations
