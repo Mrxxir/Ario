@@ -142,12 +142,15 @@ class CompositionInputScope(str, Enum):
 class CompositionParticipantResult:
     irg_id: str
     audit_id: str
+    declared_scope: str = "UNSPECIFIED"
 
     def __post_init__(self) -> None:
         if not self.irg_id or not self.irg_id.strip():
             raise ValueError("irg_id must be non-empty")
         if not self.audit_id or not self.audit_id.strip():
             raise ValueError("audit_id must be non-empty")
+        if not self.declared_scope or not self.declared_scope.strip():
+            raise ValueError("declared_scope must be non-empty")
 
 
 @dataclass(frozen=True)
@@ -183,6 +186,7 @@ class CompositionRequest:
 class CompositionSummaryRecord:
     audit_id: str
     declared_irg_id: str
+    declared_scope: str
     verdict: str
     rule_versions: tuple[str, ...]
     configuration_id: str
