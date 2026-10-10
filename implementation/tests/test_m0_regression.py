@@ -1030,7 +1030,11 @@ def _f15_fixture(conclusion):
     request = CompositionRequest(
         composition_id="F15-COMPOSITION",
         participant_results=tuple(
-            CompositionParticipantResult(f"IRG-{i:02d}", f"F15-AUDIT-{i}")
+            CompositionParticipantResult(
+                f"IRG-{i:02d}",
+                f"F15-AUDIT-{i}",
+                declared_scope=f"F15-TEST-SCOPE-IRG-{i:02d}",
+            )
             for i in range(1, 6)
         ),
         composition_rule_id=(
@@ -1083,6 +1087,8 @@ def test_f15_allows_bounded_summary():
     assert len(summary.records) == 5
     assert summary.verdict_counts == (("PASS", 5),)
     assert all(record.declared_irg_id.startswith("IRG-") for record in summary.records)
+    assert all(record.declared_scope.startswith("F15-TEST-SCOPE-") for record in summary.records)
+    assert "scopes are caller-supplied" in summary.limitations
     assert "does not establish Claim truth" in summary.limitations
 
 
